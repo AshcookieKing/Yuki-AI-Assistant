@@ -115,9 +115,9 @@ def sing(query, target, max_seconds, reverb=0.5, steps=30):
 
     # 2. отделяем вокал от музыки
     progress.update(stage="separate", detail="Отделяю вокал от музыки")
-    subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs_ft",
+    subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs",
                     "-o", str(out / "sep"), str(cut)], check=True, capture_output=True)
-    sep = out / "sep" / "htdemucs_ft" / "cut"
+    sep = out / "sep" / "htdemucs" / "cut"
     voc_src, inst = sep / "vocals.wav", sep / "no_vocals.wav"
 
     # 3. перепеваем своим голосом; мужской вокал поднимаем на октаву (тональность песни не меняется)
