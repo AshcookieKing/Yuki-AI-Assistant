@@ -49,11 +49,24 @@ def _preload():
         status["stt"] = f"ошибка: {e}"
 
 
+async def _warm_voice():
+    """Голос по образцу: заранее поднимаем голосовой модуль, чтобы первая фраза не ждала загрузки."""
+    if not (settings.get().get("voice_clone") and voice.available() and voice.REF.exists()):
+        return
+    try:
+        await voice.ensure_worker()
+        async with httpx.AsyncClient(timeout=600) as c:
+            await c.post(voice.WORKER_URL + "/warmup", json={})
+    except Exception as e:
+        print("[voice] прогрев не удался:", e)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     settings.load()
     MAIN_LOOP["loop"] = asyncio.get_running_loop()
     asyncio.create_task(activity.run())
+    asyncio.create_task(_warm_voice())
     threading.Thread(target=_preload, daemon=True).start()
     yield
     voice.stop_worker()

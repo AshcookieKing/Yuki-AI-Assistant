@@ -17,6 +17,7 @@ SCRIPT = ROOT / "singer" / "worker.py"
 REF = DATA_DIR / "voice_ref.wav"
 
 _proc: subprocess.Popen | None = None
+_start_lock = asyncio.Lock()  # фразы озвучиваются параллельно — без замка каждая запускала свой процесс
 
 
 def available() -> bool:
@@ -32,9 +33,20 @@ async def _alive() -> bool:
 
 
 async def ensure_worker():
+    async with _start_lock:
+        await _ensure_worker()
+
+
+async def _ensure_worker():
     global _proc
     if await _alive():
         return
+    if _proc and _proc.poll() is None:
+        # уже запускается — просто ждём
+        for _ in range(240):
+            if await _alive():
+                return
+            await asyncio.sleep(0.5)
     if not available():
         raise RuntimeError("Голосовой модуль не установлен (запусти setup_voice.bat)")
     log = open(DATA_DIR / "voice_worker.log", "a", encoding="utf-8")

@@ -44,20 +44,49 @@ def vc():
 
         progress.update(stage="loading", detail="Загружаю голосовые модели")
         _vc = SeedVCWrapper()
+        # модели для пения держим в оперативной памяти — видеокарта нужна мозгу и слуху
+        _move_f0("cpu")
     return _vc
+
+
+def _move_f0(device):
+    import torch
+
+    v = _vc
+    for m in v.model_f0.values():
+        m.to(device)
+    v.bigvgan_44k_model.to(device)
+    r = v.rmvpe
+    r.model.to(device)
+    r.mel_extractor.to(device)
+    r.device = device
+    if device == "cpu":
+        torch.cuda.empty_cache()
 
 
 def run_vc(source, target, f0, steps, shift=0, auto_f0=False):
     with _vc_lock:
-        gen = vc().convert_voice(source, target, diffusion_steps=steps, f0_condition=f0,
-                                 auto_f0_adjust=auto_f0, pitch_shift=shift, stream_output=True)
-        full, sr = None, (44100 if f0 else 22050)
-        for _mp3, audio in gen:
-            if audio is not None:
-                full = audio
-        if isinstance(full, tuple):  # обёртка отдаёт (частота, массив)
-            sr, full = full
-        return np.asarray(full, dtype=np.float32), sr
+        v = vc()
+        if f0:
+            _move_f0("cuda")  # на время песни переносим модели пения на видеокарту
+        try:
+            gen = v.convert_voice(source, target, diffusion_steps=steps, f0_condition=f0,
+                                  auto_f0_adjust=auto_f0, pitch_shift=shift, stream_output=True)
+            full = None
+            for _mp3, audio in gen:
+                if audio is not None:
+                    full = audio
+        finally:
+            if f0:
+                _move_f0("cpu")
+        return _finish(full, f0)
+
+
+def _finish(full, f0):
+    sr = 44100 if f0 else 22050
+    if isinstance(full, tuple):  # обёртка отдаёт (частота, массив)
+        sr, full = full
+    return np.asarray(full, dtype=np.float32), sr
 
 
 def median_f0(path, sr=16000):
@@ -184,5 +213,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 8766), Handler)
+    except OSError:
+        print("[voice-worker] уже запущен — выхожу", flush=True)
+        sys.exit(0)
     print("[voice-worker] listening on 8766", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", 8766), Handler).serve_forever()
+    server.serve_forever()

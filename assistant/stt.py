@@ -40,8 +40,9 @@ def _load():
     name, dev = s.get("stt_model", "large-v3-turbo"), s.get("stt_device", "auto")
     if _model is not None and _model_key == (name, dev):
         return _model
-    attempts = [("cuda", "float16"), ("cpu", "int8")] if dev == "auto" else \
-        [(dev, "float16" if dev == "cuda" else "int8")]
+    # int8_float16: почти та же точность, но ~вдвое меньше видеопамяти
+    attempts = [("cuda", "int8_float16"), ("cpu", "int8")] if dev == "auto" else \
+        [(dev, "int8_float16" if dev == "cuda" else "int8")]
     last = None
     for d, ct in attempts:
         try:
