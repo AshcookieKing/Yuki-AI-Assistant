@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Юки — ИИ ассистент</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="topbar">
+  <div id="title"><span id="nameLabel">Юки</span> <span id="stateLabel" class="pill">сплю</span></div>
+  <div class="top-actions">
+    <button id="logBtn" title="История">💬</button>
+    <button id="settingsBtn" title="Настройки">⚙</button>
+  </div>
+</div>
+
+<div id="subtitle" class="hidden"></div>
+
+<aside id="log" class="hidden"><div id="logInner"></div></aside>
+
+<div id="bottombar">
+  <button id="micBtn" title="Микрофон (удерживай, если режим «по кнопке»)">🎤</button>
+  <div id="meter"><div id="meterFill"></div></div>
+  <input id="textInput" placeholder="Напиши или просто говори..." autocomplete="off">
+  <button id="sendBtn">➤</button>
+  <button id="stopBtn" title="Остановить">■</button>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1>ИИ-ассистент</h1>
+    <p>Нажми, чтобы разбудить её и включить микрофон.</p>
+    <button id="startBtn" class="primary">Начать</button>
+    <p id="loadInfo" class="muted"></p>
+  </div>
+</div>
+
+<div id="confirm" class="modal hidden">
+  <div class="card">
+    <h3>Разрешить действие?</h3>
+    <p id="confirmName" class="muted"></p>
+    <pre id="confirmDetail"></pre>
+    <div class="row">
+      <button id="confirmNo">Отклонить</button>
+      <button id="confirmYes" class="primary">Разрешить</button>
+    </div>
+  </div>
+</div>
+
+<aside id="settings" class="hidden">
+  <div class="settings-head">
+    <h2>Настройки</h2>
+    <button id="closeSettings">✕</button>
+  </div>
+  <nav id="tabs">
+    <button data-tab="persona" class="active">Личность</button>
+    <button data-tab="brain">Модель</button>
+    <button data-tab="memory">Память</button>
+    <button data-tab="voice">Голос</button>
+    <button data-tab="ears">Слух</button>
+    <button data-tab="pc">Доступ к ПК</button>
+    <button data-tab="look">Внешний вид</button>
+  </nav>
+
+  <section data-panel="persona" class="active">
+    <label>Имя ассистента <input data-key="assistant_name"></label>
+    <label>Как она тебя называет <input data-key="user_name"></label>
+    <label>Характер
+      <select id="presetSelect" data-key="persona_preset"></select>
+    </label>
+    <label>Описание личности (системный промпт)
+      <textarea data-key="persona" rows="9"></textarea>
+    </label>
+    <p class="muted">{name} и {user} подставляются автоматически.</p>
+    <label>Грубость: <b id="rudeLabel"></b>
+      <input type="range" min="0" max="3" step="1" data-key="rudeness" data-type="number"></label>
+    <p class="muted">0 — вежливая · 1 — подколы · 2 — хамка, оскорбляет и стебёт · 3 — без цензуры, с матом.</p>
+    <label>Доп. правила <textarea data-key="extra_rules" rows="3"></textarea></label>
+    <label>Заговаривать самой после тишины, мин (0 — нет)
+      <input type="number" min="0" max="60" step="1" data-key="idle_chatter" data-type="number"></label>
+    <label class="check"><input type="checkbox" data-key="autonomy_screen"> Подглядывать на экран, чтобы было о чём поговорить (снимок обрабатывается только локально)</label>
+    <label>Помнить сообщений <input type="number" min="4" max="200" data-key="max_history" data-type="number"></label>
+    <button id="clearMemory">Очистить память диалога</button>
+  </section>
+
+  <section data-panel="brain">
+    <label>Где работает мозг
+      <select id="providerSelect" data-key="llm_provider">
+        <option value="ollama">На этом ПК (Ollama) — бесплатно, офлайн</option>
+        <option value="groq">Groq — облако, бесплатно, очень быстро</option>
+        <option value="gemini">Google Gemini — облако, бесплатно, самая умная</option>
+        <option value="openrouter">OpenRouter — облако, бесплатные модели</option>
+      </select></label>
+    <div id="cloudBox" class="hidden">
+      <p class="muted" id="cloudHint"></p>
+      <label>API-ключ <input type="password" id="cloudKey" autocomplete="off" placeholder="вставь ключ сюда"></label>
+      <label>Облачная модель <div class="row"><select id="cloudModel"></select><button id="cloudRefresh">↻</button></div></label>
+    </div>
+    <label>Модель Ollama (локальная)
+      <select id="modelSelect" data-key="llm_model"></select>
+    </label>
+    <button id="refreshModels">Обновить список</button>
+    <h4>Скачать бесплатные модели</h4>
+    <div id="recommended"></div>
+    <label>Своя модель из ollama.com/library
+      <div class="row"><input id="customModel" placeholder="например qwen3:14b"><button id="pullCustom">Скачать</button></div>
+    </label>
+    <div id="pullProgress" class="muted"></div>
+    <label>Креативность (temperature): <b data-show="temperature"></b>
+      <input type="range" min="0" max="1.5" step="0.05" data-key="temperature" data-type="number"></label>
+    <label>Контекст (токенов)
+      <select data-key="num_ctx" data-type="number">
+        <option>4096</option><option>8192</option><option>16384</option><option>32768</option>
+      </select></label>
+    <label class="check"><input type="checkbox" data-key="smart_mode"> Умный режим: на сложные вопросы сначала подумать (+3–8 с, но ответы умнее)</label>
+    <label class="check"><input type="checkbox" data-key="agent_think"> Думать перед действиями на ПК (точнее, +1–2 с)</label>
+    <label class="check"><input type="checkbox" data-key="think"> Думать перед ответом (умнее, но заметно медленнее)</label>
+    <label>Ключ Tavily для поиска в интернете (необязательно, бесплатно на tavily.com)
+      <input type="password" data-key="tavily_key" autocomplete="off"></label>
+    <label>Адрес Ollama <input data-key="ollama_url"></label>
+  </section>
+
+  <section data-panel="memory">
+    <label class="check"><input type="checkbox" data-key="memory_enabled"> Запоминать важное и развиваться</label>
+    <label class="check"><input type="checkbox" data-key="learn_activity"> Изучать, чем я пользуюсь (активные окна и программы, хранится только на ПК; банки, пароли и инкогнито не пишутся)</label>
+    <label>Переписывать дневник личности каждые N реплик
+      <input type="number" min="3" max="100" data-key="reflect_every" data-type="number"></label>
+    <h4>Дневник личности</h4>
+    <p class="muted">Это она сама: кем себя считает, как к тебе относится, ваши шутки. Она переписывает его со временем — так развивается характер. Можно править.</p>
+    <textarea id="selfNotes" rows="9"></textarea>
+    <div class="row"><button id="saveSelf">Сохранить</button><button id="reflectNow">🧠 Обдумать сейчас</button></div>
+    <h4>Что она помнит</h4>
+    <div class="row"><input id="memAdd" placeholder="добавить факт, например: я люблю Arma 3"><button id="memAddBtn">+</button></div>
+    <div id="memList"></div>
+  </section>
+
+  <section data-panel="voice">
+    <label>Движок
+      <select data-key="tts_engine">
+        <option value="silero">Silero — офлайн, локально</option>
+        <option value="edge">Edge TTS — онлайн, бесплатно</option>
+      </select></label>
+    <label>Голос Silero <select id="sileroSpeaker" data-key="silero_speaker"></select></label>
+    <label>Версия Silero
+      <select data-key="silero_model"><option>v4_ru</option><option>v5_ru</option></select></label>
+    <label>Голос Edge <select id="edgeVoice" data-key="edge_voice"></select></label>
+    <label>Тон голоса Edge, Гц (выше — моложе и милее, без искажений): <b data-show="edge_pitch"></b>
+      <input type="range" min="-20" max="70" step="5" data-key="edge_pitch" data-type="number"></label>
+    <h4>Аниме-фильтр</h4>
+    <p class="muted">Фильтр сильно меняет тембр, но на высоких значениях добавляет «металл». Для живого голоса — «Выкл» или «Мягкая».</p>
+    <label>Пресет <select id="animePreset" data-key="anime_preset"></select></label>
+    <label>Тон, Гц (0 — не менять): <b data-show="anime_pitch"></b>
+      <input type="range" min="0" max="450" step="10" data-key="anime_pitch" data-type="number"></label>
+    <label>Тембр (моложе →): <b data-show="anime_formant"></b>
+      <input type="range" min="0.9" max="1.3" step="0.01" data-key="anime_formant" data-type="number"></label>
+    <label>Живость интонации: <b data-show="anime_expressive"></b>
+      <input type="range" min="0.6" max="2.2" step="0.05" data-key="anime_expressive" data-type="number"></label>
+    <h4>Синтез</h4>
+    <label>Базовый тон синтеза: <b data-show="voice_pitch"></b>
+      <input type="range" min="0" max="4" step="1" data-key="voice_pitch" data-type="number"></label>
+    <label>Скорость: <b data-show="voice_rate"></b>
+      <input type="range" min="0.6" max="1.5" step="0.05" data-key="voice_rate" data-type="number"></label>
+    <label>Громкость: <b data-show="volume"></b>
+      <input type="range" min="0" max="1.5" step="0.05" data-key="volume" data-type="number"></label>
+    <div class="row">
+      <input id="ttsTestText" value="Ну привет. Опять ты? Ладно, так уж и быть, помогу.">
+      <button id="ttsTest">▶ Тест</button>
+    </div>
+    <h4>Живой голос по образцу и пение</h4>
+    <p class="muted" id="voiceModuleInfo"></p>
+    <p class="muted">Загрузи 10–30 секунд чистой речи голоса, который нравится (без музыки) — нейросеть перенесёт
+      этот тембр на её речь и песни. Используй голос, на который у тебя есть права (свой, друга, озвучку с разрешением).</p>
+    <label>Образец голоса <input type="file" id="voiceUpload" accept="audio/*"></label>
+    <div class="row"><button id="voiceRefPlay">▶ Образец</button><button id="voiceRefReset">Сбросить на её голос</button></div>
+    <label class="check"><input type="checkbox" data-key="voice_clone"> Говорить голосом образца (нужно ~3 ГБ видеопамяти, +0.5–1 с на фразу)</label>
+    <label>Качество переноса: <b data-show="clone_steps"></b>
+      <input type="range" min="4" max="30" step="1" data-key="clone_steps" data-type="number"></label>
+    <label>Сколько секунд песни петь: <b data-show="sing_seconds"></b>
+      <input type="range" min="30" max="300" step="10" data-key="sing_seconds" data-type="number"></label>
+    <label>Сценическое эхо: <b data-show="sing_reverb"></b>
+      <input type="range" min="0" max="1" step="0.05" data-key="sing_reverb" data-type="number"></label>
+    <label>Качество пения (шаги нейросети): <b data-show="sing_steps"></b>
+      <input type="range" min="15" max="50" step="5" data-key="sing_steps" data-type="number"></label>
+    <div class="row"><input id="singQuery" placeholder="песня и исполнитель"><button id="singBtn">🎤 Спой</button></div>
+  </section>
+
+  <section data-panel="ears">
+    <label>Режим микрофона
+      <select data-key="listen_mode">
+        <option value="vad">Всегда слушать (авто-определение речи)</option>
+        <option value="ptt">По кнопке (держи 🎤 или клавишу `)</option>
+        <option value="off">Выключен</option>
+      </select></label>
+    <label>Чувствительность: <b data-show="vad_sensitivity"></b>
+      <input type="range" min="0" max="1" step="0.05" data-key="vad_sensitivity" data-type="number"></label>
+    <label>Пауза конца фразы, мс: <b data-show="silence_ms"></b>
+      <input type="range" min="300" max="2000" step="50" data-key="silence_ms" data-type="number"></label>
+    <label>На что реагировать
+      <select data-key="attention_mode">
+        <option value="smart">Умно: на тебя, а фон (видео, разговоры с другими) игнорировать</option>
+        <option value="name">Только если назвал её по имени (или сразу после её ответа)</option>
+        <option value="always">На всё, что слышит</option>
+      </select></label>
+    <label class="check"><input type="checkbox" data-key="barge_in"> Можно перебивать голосом</label>
+    <label>Модель распознавания (Whisper)
+      <select id="sttModel" data-key="stt_model"></select></label>
+    <label>Устройство
+      <select data-key="stt_device">
+        <option value="auto">Авто (видеокарта, если есть)</option>
+        <option value="cuda">Видеокарта (CUDA)</option>
+        <option value="cpu">Процессор</option>
+      </select></label>
+    <p class="muted" id="sttStatus"></p>
+  </section>
+
+  <section data-panel="pc">
+    <label>Уровень доступа
+      <select data-key="pc_access">
+        <option value="off">Выключен — только разговор</option>
+        <option value="confirm">С подтверждением опасных действий</option>
+        <option value="full">Полный доступ без вопросов</option>
+      </select></label>
+    <p class="muted">Она умеет: выполнять команды PowerShell, открывать и закрывать программы, сайты и поиск,
+      читать и создавать файлы, смотреть загрузку системы и процессы, менять громкость, управлять музыкой,
+      печатать текст и нажимать сочетания клавиш, работать с буфером обмена.</p>
+    <p class="warn">«Полный доступ» значит, что модель может выполнить любую команду — включая удаление файлов —
+      без твоего подтверждения. Локальные модели иногда ошибаются.</p>
+    <label class="check"><input type="checkbox" data-key="confirm_destructive"> Даже в полном доступе спрашивать перед удалением, форматированием и выключением ПК</label>
+    <p class="muted">Мышь: она кликает по описанию («кнопка Отправить»), перетаскивает, прокручивает и нажимает кнопки программ по названию.</p>
+    <label>Таймаут команды, с <input type="number" min="5" max="600" data-key="command_timeout" data-type="number"></label>
+  </section>
+
+  <section data-panel="look">
+    <label>3D-модель (VRM)
+      <select id="vrmSelect" data-key="vrm_file"></select></label>
+    <label>Наряд <select id="outfitSelect" data-key="outfit"></select></label>
+    <p class="muted">Можно и голосом: «переоденься в ведьмочку».</p>
+    <label>Загрузить свою .vrm <input type="file" id="vrmUpload" accept=".vrm"></label>
+    <p class="muted">Готовых аниме-девушек можно скачать бесплатно на hub.vroid.com (с разрешением на скачивание)
+      или сделать свою в бесплатной программе VRoid Studio — экспорт в VRM.</p>
+    <label>Фон <input type="color" data-key="background"></label>
+    <label>Отдаление камеры (в браузере): <b data-show="camera_distance"></b>
+      <input type="range" min="0.5" max="2.5" step="0.05" data-key="camera_distance" data-type="number"></label>
+    <h4>Фигурка на рабочем столе</h4>
+    <label>Размер (меньше — крупнее, колесо мыши на ней): <b data-show="mascot_distance"></b>
+      <input type="range" min="0.3" max="2" step="0.02" data-key="mascot_distance" data-type="number"></label>
+    <label class="check"><input type="checkbox" data-key="mascot_on_top"> Поверх всех окон</label>
+    <p class="muted">Тащи её мышкой, клик — «тык», правый клик — меню. Пустые места окна пропускают клики насквозь.</p>
+    <label class="check"><input type="checkbox" data-key="show_subtitles"> Показывать субтитры</label>
+    <p class="muted">Камеру можно крутить мышью, колесо — приближение.</p>
+  </section>
+</aside>
+
+<script>
+  // режим окна до загрузки модулей, чтобы не мигал фон
+  document.documentElement.className = 'mode-' + (new URLSearchParams(location.search).get('mode') || 'full');
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

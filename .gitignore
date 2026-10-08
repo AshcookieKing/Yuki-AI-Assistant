@@ -1,0 +1,15 @@
+# окружения и зависимости (ставятся setup.bat / setup_voice.bat)
+.venv/
+.venv-sing/
+desktop/node_modules/
+singer/seed-vc/
+__pycache__/
+*.pyc
+
+# личные данные: настройки, память, история, журнал, песни, образец голоса
+data/
+
+# скачиваемые модели и тестовые записи
+static/models/*.vrm
+voice_samples/
+*.log
