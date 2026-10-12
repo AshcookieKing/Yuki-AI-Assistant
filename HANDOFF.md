@@ -42,7 +42,7 @@
 
 Логи: `data/server.log`, `data/actions.log` (все действия + строки TIMING), `data/voice_worker*.log`, `data/tts_worker*.log`.
 
-## Что сделано в последней сессии и НЕ закоммичено
+## Что сделано в последней сессии (закоммичено в 0fdfc28, но не проверено вживую)
 
 1. **Облачные модели Ollama** (`server.py`: `cloud_models()`, `/api/ollama/cloud_check`; `app.js`: `refreshModels`/`checkCloud`
    с группами 💻/☁ в списке моделей; настройка `cloud_screen`). Теги: `имя:cloud` или `имя:тег-cloud`.
