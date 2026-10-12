@@ -54,6 +54,7 @@ python -m pip install -r requirements.txt
 if errorlevel 1 ( echo [!] Не удалось поставить библиотеки. Проверь интернет и запусти снова. & pause & exit /b 1 )
 
 rem ---------- 5. 3D-модель ----------
+if not exist static\models mkdir static\models
 if not exist static\models\default.vrm (
   echo Скачиваю 3D-модель...
   curl -L -o static\models\default.vrm https://pixiv.github.io/three-vrm/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm

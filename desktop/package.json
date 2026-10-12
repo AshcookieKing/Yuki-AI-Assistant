@@ -18,7 +18,7 @@
     "appId": "com.ashcookieking.yuki",
     "productName": "Yuki",
     "executableName": "Yuki",
-    "directories": { "output": "../dist" },
+    "directories": { "output": "../release" },
     "files": ["main.js", "preload.js", "setup-preload.js", "setup.html", "icon.png", "icon.ico", "package.json"],
     "extraResources": [
       {

@@ -10,11 +10,8 @@
 
 ## Где что лежит
 
-- **Папка проекта (рабочая копия):**
-  `C:\Users\mashi\AppData\Roaming\Claude\scratch-workspaces\0eb1e7c8-ddef-491e-aa94-ef83300cb019\28c3c25a-b9bc-40cd-a663-9d4eb833d330\scratch-2026-10-07-d7c4bf`
-  ⚠️ Это временная папка прошлой сессии — **первым делом перенеси проект в постоянное место**
-  (например `C:\Yuki` или `D:\Projects\Yuki`): скопируй всю папку целиком (включая `.venv`, `.venv-sing`, `.venv-tts`,
-  `data`, `singer\seed-vc`, `desktop\node_modules`) и работай уже там.
+- **Папка проекта:** `D:\Projects\Yuki` (перенесена 2026-10-12 из временной scratch-папки; на C: мало места).
+  venv-ы переносимы (`pyvenv.cfg` указывает на базовый Python 3.11), пути в коде относительные.
 - **GitHub (приватный):** https://github.com/AshcookieKing/Yuki-AI-Assistant — ветка `main`, `gh` авторизован как AshcookieKing.
   Отдельный git-репозиторий внутри папки проекта (домашняя папка `C:\Users\mashi` — тоже git-репо, не путать).
 - **Ollama:** `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` (не в PATH), версия 0.40. Модели: `qwen3.5:9b` (основная локальная),

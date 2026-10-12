@@ -393,7 +393,7 @@ async def api_reflect():
 
 
 @app.get("/api/cloud/models")
-async def cloud_models(provider: str):
+async def api_cloud_models(provider: str):
     return {"models": await llm.list_cloud_models(provider)}
 
 

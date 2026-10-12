@@ -15,3 +15,4 @@ voice_samples/
 *.log
 dist/
 .venv-tts/
+release/

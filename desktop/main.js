@@ -31,7 +31,7 @@ function syncBackend() {
 
 function backendReady() {
   return fs.existsSync(path.join(ROOT, '.venv', 'Scripts', 'python.exe'))
-    && fs.existsSync(path.join(ROOT, 'data', '.installed'));
+    && (!PACKAGED || fs.existsSync(path.join(ROOT, 'data', '.installed')));
 }
 
 let setupWin = null;
@@ -41,7 +41,7 @@ function openSetup() {
     webPreferences: { preload: path.join(__dirname, 'setup-preload.js') },
   });
   setupWin.loadFile(path.join(__dirname, 'setup.html'));
-  setupWin.on('closed', () => { setupWin = null; if (!mascot) app.quit(); });
+  setupWin.on('closed', () => { mlog('окно подготовки закрыто'); setupWin = null; if (!mascot) app.quit(); });
 }
 
 // установка идёт в обычном видимом окне консоли — пользователь видит каждый шаг
@@ -59,8 +59,15 @@ ipcMain.on('setup-launch', async () => {
   setupWin?.destroy();
 });
 
+// журнал запуска — помогает понять, почему программа не стартовала
+const LOG_FILE = path.join(app.getPath('temp'), 'yuki-main.log');
+function mlog(msg) { try { fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}
+`); } catch {} }
+process.on('uncaughtException', (e) => mlog('ОШИБКА: ' + (e.stack || e)));
+mlog(`старт, packaged=${app.isPackaged}, ROOT=${ROOT}`);
+
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) { mlog('уже запущена другая копия — выхожу'); app.quit(); }
 
 let mascot = null;
 let panel = null;
@@ -209,7 +216,8 @@ app.whenReady().then(async () => {
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
   tray.on('double-click', openPanel);
 
-  syncBackend();
+  try { syncBackend(); } catch (e) { mlog('syncBackend: ' + e); }
+  mlog(`backendReady=${backendReady()}`);
   if (!backendReady()) { openSetup(); return; }
   await startMascot();
 });
