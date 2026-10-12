@@ -403,18 +403,43 @@ document.querySelectorAll('[data-key]').forEach((el) => {
       [patch.anime_pitch, patch.anime_formant, patch.anime_expressive] = META.anime_presets[v];
     }
     if (['anime_pitch', 'anime_formant', 'anime_expressive'].includes(el.dataset.key)) patch.anime_preset = 'Свой';
-    save(patch).then(() => { if (el.id === 'providerSelect') updateCloudBox(); });
+    save(patch).then(() => {
+      if (el.id === 'providerSelect') updateCloudBox();
+      if (el.id === 'modelSelect') checkCloud();
+    });
   });
 });
 
 async function refreshModels() {
   const r = await (await fetch('/api/ollama/models')).json();
-  const list = r.models.length ? r.models : [S.llm_model];
-  if (!list.includes(S.llm_model)) list.unshift(S.llm_model);
-  fillOptions($('modelSelect'), list);
-  $('modelSelect').value = S.llm_model;
+  const local = r.models.length ? r.models : [];
+  const cloud = r.cloud || [];
+  const sel = $('modelSelect');
+  sel.innerHTML = '';
+  const group = (label, items, mark) => {
+    if (!items.length) return;
+    const g = document.createElement('optgroup');
+    g.label = label;
+    for (const it of items) {
+      const o = document.createElement('option');
+      o.value = it;
+      o.textContent = mark + it.replace(/[-:]cloud$/, '');
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
+  };
+  group('На этом ПК', local.includes(S.llm_model) || S.llm_model.endsWith('cloud') ? local : [S.llm_model, ...local], '💻 ');
+  group('Облако Ollama — считается на серверах (нужен вход в Ollama)', cloud, '☁ ');
+  sel.value = S.llm_model;
   if (!r.ok) $('pullProgress').textContent = 'Ollama не отвечает: запусти её (start.bat делает это сам).';
-  return r.models;
+  checkCloud();
+  return local;
+}
+
+async function checkCloud() {
+  const j = await (await fetch('/api/ollama/cloud_check')).json();
+  $('cloudStatus').textContent = !j.cloud ? '' : j.ok ? '☁ Облако работает — твоя видеокарта свободна для голоса и слуха.'
+    : '⚠ ' + j.error;
 }
 
 async function renderRecommended() {

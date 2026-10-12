@@ -1,8 +1,48 @@
 {
   "name": "yuki-desktop",
-  "version": "1.0.0",
+  "productName": "Yuki",
+  "version": "1.1.0",
+  "description": "Юки — ИИ-ассистентка с 3D-аватаром",
+  "author": "AshcookieKing",
   "private": true,
   "main": "main.js",
-  "scripts": { "start": "electron ." },
-  "devDependencies": { "electron": "^33.2.0" }
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.ashcookieking.yuki",
+    "productName": "Yuki",
+    "executableName": "Yuki",
+    "directories": { "output": "../dist" },
+    "files": ["main.js", "preload.js", "setup-preload.js", "setup.html", "icon.png", "icon.ico", "package.json"],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "backend",
+        "filter": [
+          "server.py", "requirements.txt", "setup.bat", "setup_voice.bat",
+          "assistant/**/*", "static/**/*", "singer/worker.py", "singer/tts_worker.py",
+          "!**/__pycache__/**", "!static/models/*.vrm"
+        ]
+      }
+    ],
+    "win": { "target": "nsis", "icon": "icon.ico" },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Юки",
+      "uninstallDisplayName": "Юки — ИИ-ассистент",
+      "artifactName": "Yuki-Setup-${version}.exe",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico"
+    }
+  }
 }

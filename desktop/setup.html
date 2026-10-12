@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Юки — подготовка</title>
+<style>
+  :root { --bg: #1b1630; --panel: #241d3d; --text: #f1edff; --muted: #a99fcb; --accent: #ff6fae; --accent2: #8f7bff; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", sans-serif; }
+  .wrap { padding: 28px 32px; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  p { color: var(--muted); margin: 6px 0; }
+  ol { padding-left: 20px; } li { margin: 6px 0; }
+  .card { background: var(--panel); border-radius: 14px; padding: 16px 20px; margin: 16px 0; }
+  button { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: 0; border-radius: 10px;
+    padding: 11px 22px; font: 600 15px "Segoe UI", sans-serif; cursor: pointer; margin-right: 8px; }
+  button.secondary { background: rgba(255,255,255,0.1); font-weight: 400; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #status { margin-top: 14px; min-height: 22px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Привет! Давай подготовим Юки 🌸</h1>
+  <p>Это нужно один раз. Займёт 15–40 минут и около 15 ГБ места.</p>
+  <div class="card">
+    <ol>
+      <li>Нажми <b>«Начать подготовку»</b> — откроется окно установки.</li>
+      <li>Если не хватает Python или Ollama, откроются их официальные сайты — установи их (у Python поставь галочку
+        <b>Add python.exe to PATH</b>) и нажми «Начать подготовку» ещё раз.</li>
+      <li>Дождись надписи «Готово» в окне установки и нажми здесь <b>«Запустить Юки»</b>.</li>
+    </ol>
+  </div>
+  <button id="start">Начать подготовку</button>
+  <button id="voice" class="secondary">Пение и нейро-голос (+6 ГБ, NVIDIA)</button>
+  <button id="run" disabled>Запустить Юки</button>
+  <div id="status"></div>
+</div>
+<script>
+  const { setup } = window;
+  const st = document.getElementById('status');
+  document.getElementById('start').onclick = () => { setup.run('setup.bat'); st.textContent = 'Окно установки открыто — следи за ним…'; };
+  document.getElementById('voice').onclick = () => { setup.run('setup_voice.bat'); st.textContent = 'Ставлю голосовые модули в отдельном окне…'; };
+  document.getElementById('run').onclick = () => setup.launch();
+  setInterval(async () => {
+    if (await setup.ready()) {
+      document.getElementById('run').disabled = false;
+      st.textContent = '✅ Всё готово — можно запускать.';
+    }
+  }, 2000);
+</script>
+</body>
+</html>

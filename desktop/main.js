@@ -6,9 +6,58 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-const ROOT = path.resolve(__dirname, '..');
+// В установленной версии код сервера лежит в resources/backend, а всё рабочее (Python, модели, память)
+// — в %LOCALAPPDATA%\Yuki\backend: так работает при любой папке установки и обновления не стирают память.
+const PACKAGED = app.isPackaged;
+const ROOT = PACKAGED ? path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'Yuki', 'backend')
+  : path.resolve(__dirname, '..');
 const URL = 'http://127.0.0.1:8765';
 const STATE_FILE = path.join(ROOT, 'data', 'window.json');
+
+function syncBackend() {
+  if (!PACKAGED) return;
+  const src = path.join(process.resourcesPath, 'backend');
+  const copy = (from, to) => {
+    fs.mkdirSync(to, { recursive: true });
+    for (const e of fs.readdirSync(from, { withFileTypes: true })) {
+      const a = path.join(from, e.name);
+      const b = path.join(to, e.name);
+      if (e.isDirectory()) copy(a, b); else fs.copyFileSync(a, b);
+    }
+  };
+  copy(src, ROOT);
+  fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
+}
+
+function backendReady() {
+  return fs.existsSync(path.join(ROOT, '.venv', 'Scripts', 'python.exe'))
+    && fs.existsSync(path.join(ROOT, 'data', '.installed'));
+}
+
+let setupWin = null;
+function openSetup() {
+  setupWin = new BrowserWindow({
+    width: 760, height: 560, title: 'Юки — подготовка', backgroundColor: '#1b1630', autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'setup-preload.js') },
+  });
+  setupWin.loadFile(path.join(__dirname, 'setup.html'));
+  setupWin.on('closed', () => { setupWin = null; if (!mascot) app.quit(); });
+}
+
+// установка идёт в обычном видимом окне консоли — пользователь видит каждый шаг
+ipcMain.on('setup-run', (_e, script) => {
+  if (!['setup.bat', 'setup_voice.bat'].includes(script)) return;
+  spawn('cmd.exe', ['/c', 'start', '"Установка Юки"', 'cmd', '/c', script], {
+    cwd: ROOT, detached: true, stdio: 'ignore', env: { ...process.env, YUKI_PACKAGED: '1' },
+  }).unref();
+});
+ipcMain.handle('setup-ready', () => backendReady());
+ipcMain.on('setup-launch', async () => {
+  if (!backendReady()) return;
+  setupWin?.hide();
+  await startMascot();
+  setupWin?.destroy();
+});
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -35,6 +84,7 @@ async function ensureBackend() {
   }
   if (!(await ping(URL + '/api/status'))) {
     const py = path.join(ROOT, '.venv', 'Scripts', 'python.exe');
+    fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
     const log = fs.openSync(path.join(ROOT, 'data', 'server.log'), 'a');
     server = spawn(py, ['server.py'], { cwd: ROOT, windowsHide: true, stdio: ['ignore', log, log],
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
@@ -120,7 +170,7 @@ function setOnTop(v, persist) {
 }
 
 function trayIcon() {
-  const p = path.join(__dirname, 'icon.png');
+  const p = path.join(__dirname, 'icon.png');  // иконка трея
   return fs.existsSync(p) ? nativeImage.createFromPath(p) : nativeImage.createEmpty();
 }
 
@@ -159,14 +209,21 @@ app.whenReady().then(async () => {
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
   tray.on('double-click', openPanel);
 
+  syncBackend();
+  if (!backendReady()) { openSetup(); return; }
+  await startMascot();
+});
+
+async function startMascot() {
   if (!(await ensureBackend())) {
-    const { dialog } = require('electron');
-    dialog.showErrorBox('Юки', 'Сервер не запустился. Подробности в data\\server.log. Запусти setup.bat.');
+    const { dialog, shell } = require('electron');
+    dialog.showErrorBox('Юки', `Сервер не запустился. Подробности в файле:\n${path.join(ROOT, 'data', 'server.log')}`);
+    shell.openPath(path.join(ROOT, 'data'));
     app.quit();
     return;
   }
   createMascot();
-});
+}
 
 app.on('second-instance', openPanel);
 app.on('window-all-closed', () => {}); // живём в трее

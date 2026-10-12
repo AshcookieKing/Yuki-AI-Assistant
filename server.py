@@ -50,7 +50,15 @@ def _preload():
 
 
 async def _warm_voice():
-    """Голос по образцу: заранее поднимаем голосовой модуль, чтобы первая фраза не ждала загрузки."""
+    """Заранее поднимаем голосовые модули, чтобы первая фраза не ждала загрузки."""
+    if settings.get().get("tts_engine") == "chatterbox" and voice.tts_available():
+        try:
+            await voice.ensure_tts()
+            async with httpx.AsyncClient(timeout=900) as c:
+                await c.post(voice.TTS_URL + "/warmup", json={})
+        except Exception as e:
+            print("[voice] прогрев нейро-голоса не удался:", e)
+        return
     if not (settings.get().get("voice_clone") and voice.available() and voice.REF.exists()):
         return
     try:
@@ -70,6 +78,7 @@ async def lifespan(_app):
     threading.Thread(target=_preload, daemon=True).start()
     yield
     voice.stop_worker()
+    voice.stop_tts()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -180,7 +189,9 @@ class Hub:
             return
         s = settings.get()
         seen = ""
-        if s.get("autonomy_screen") and s.get("llm_provider", "ollama") == "ollama":
+        cloud = s.get("llm_provider", "ollama") != "ollama" or s["llm_model"].endswith("cloud")
+        # снимок экрана для самостоятельных реплик в облако не отправляем, если это явно не разрешено
+        if s.get("autonomy_screen") and (not cloud or s.get("cloud_screen", False)):
             try:
                 img = await asyncio.to_thread(tools.screenshot_b64)
                 from assistant.brain import vision
@@ -296,9 +307,46 @@ async def ollama_models():
     try:
         async with httpx.AsyncClient(timeout=5) as c:
             r = await c.get(f"{settings.get()['ollama_url']}/api/tags")
-            return {"ok": True, "models": [m["name"] for m in r.json().get("models", [])]}
+            local = [m["name"] for m in r.json().get("models", []) if not m["name"].endswith("cloud")]
     except Exception as e:
-        return {"ok": False, "models": [], "error": str(e)}
+        return {"ok": False, "models": [], "cloud": [], "error": str(e)}
+    return {"ok": True, "models": local, "cloud": await cloud_models()}
+
+
+_cloud_cache = {"t": 0.0, "list": []}
+
+
+async def cloud_models():
+    """Облачные модели Ollama (считаются на серверах ollama.com, нужен вход в аккаунт в приложении Ollama)."""
+    if time.time() - _cloud_cache["t"] < 3600 and _cloud_cache["list"]:
+        return _cloud_cache["list"]
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            names = [m["name"] for m in (await c.get("https://ollama.com/api/tags")).json().get("models", [])]
+        # через локальную Ollama облачная модель вызывается с суффиксом cloud
+        tags = [n + "-cloud" if ":" in n else n + ":cloud" for n in names]
+        _cloud_cache.update(t=time.time(), list=tags)
+    except Exception:
+        pass
+    return _cloud_cache["list"]
+
+
+@app.get("/api/ollama/cloud_check")
+async def cloud_check():
+    """Проверка: вошёл ли пользователь в аккаунт Ollama (облачные модели отвечают)."""
+    model = settings.get()["llm_model"]
+    if not model.endswith("cloud"):
+        return {"cloud": False}
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(f"{settings.get()['ollama_url']}/api/chat", json={
+                "model": model, "stream": False, "messages": [{"role": "user", "content": "ok"}],
+                "options": {"num_predict": 2}})
+        if r.status_code == 401:
+            return {"cloud": True, "ok": False, "error": "Не выполнен вход в аккаунт Ollama: открой приложение Ollama и нажми Sign in."}
+        return {"cloud": True, "ok": r.status_code == 200, "error": "" if r.status_code == 200 else r.text[:200]}
+    except Exception as e:
+        return {"cloud": True, "ok": False, "error": str(e)}
 
 
 @app.post("/api/ollama/pull")

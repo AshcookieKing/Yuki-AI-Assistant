@@ -13,3 +13,5 @@ data/
 static/models/*.vrm
 voice_samples/
 *.log
+dist/
+.venv-tts/

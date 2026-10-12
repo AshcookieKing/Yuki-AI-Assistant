@@ -171,6 +171,15 @@ async def synthesize_base(text: str) -> bytes | None:
 
 async def synthesize(text: str) -> bytes | None:
     s = settings.get()
+    if s.get("tts_engine") == "chatterbox" and text and any(ch.isalpha() for ch in text):
+        # нейро-голос сам клонирует тембр образца — перенос голоса не нужен
+        from . import voice
+
+        try:
+            return await voice.neural_tts(text)
+        except Exception as e:
+            print("[TTS] нейро-голос не ответил, говорю запасным:", e)
+            return await synthesize_base(text)
     if s.get("voice_clone") and s.get("clone_source", "silero") == "silero" and text and any(ch.isalpha() for ch in text):
         # тембр всё равно заменит образец — берём быстрый локальный Silero без фильтров как «исходник»
         clean = {**s, "anime_pitch": 0, "anime_formant": 1.0, "anime_expressive": 1.0, "voice_pitch": 2}

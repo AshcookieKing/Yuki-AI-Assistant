@@ -139,3 +139,61 @@ async def sing(query: str, on_progress) -> dict:
         raise RuntimeError(j.get("error", "ошибка"))
     j["seconds"] = round(time.time() - t)
     return j
+
+
+# ---------- нейро-голос Chatterbox (отдельный процесс в .venv-tts, порт 8767) ----------
+TTS_URL = "http://127.0.0.1:8767"
+TTS_PYTHON = ROOT / ".venv-tts" / "Scripts" / "python.exe"
+TTS_SCRIPT = ROOT / "singer" / "tts_worker.py"
+TTS_REF = DATA_DIR / "voice_ref_tts.wav"   # образец тембра для Chatterbox (если нет — берём общий)
+_tts_proc: subprocess.Popen | None = None
+_tts_lock = asyncio.Lock()
+
+
+def tts_available() -> bool:
+    return TTS_PYTHON.exists() and TTS_SCRIPT.exists()
+
+
+async def _tts_alive() -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=2) as c:
+            return (await c.get(TTS_URL + "/")).status_code == 200
+    except Exception:
+        return False
+
+
+async def ensure_tts():
+    global _tts_proc
+    async with _tts_lock:
+        if await _tts_alive():
+            return
+        if not tts_available():
+            raise RuntimeError("Нейро-голос не установлен (setup_voice.bat)")
+        if not (_tts_proc and _tts_proc.poll() is None):
+            log = open(DATA_DIR / "tts_worker.log", "a", encoding="utf-8")
+            _tts_proc = subprocess.Popen([str(TTS_PYTHON), str(TTS_SCRIPT)], stdout=log, stderr=log,
+                                         creationflags=subprocess.CREATE_NO_WINDOW,
+                                         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        for _ in range(240):
+            if await _tts_alive():
+                return
+            await asyncio.sleep(0.5)
+        raise RuntimeError("Нейро-голос не запустился, см. data/tts_worker.log")
+
+
+async def neural_tts(text: str) -> bytes:
+    await ensure_tts()
+    s = settings.get()
+    ref = TTS_REF if TTS_REF.exists() else REF
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(TTS_URL + "/tts", json={
+            "text": text, "ref": str(ref), "exaggeration": float(s.get("tts_exaggeration", 0.7)),
+            "cfg": float(s.get("tts_cfg", 0.35)), "temperature": float(s.get("tts_temperature", 0.8))})
+    if r.status_code != 200:
+        raise RuntimeError(r.text[:200])
+    return r.content
+
+
+def stop_tts():
+    if _tts_proc and _tts_proc.poll() is None:
+        subprocess.run(["taskkill", "/pid", str(_tts_proc.pid), "/T", "/F"], capture_output=True)
