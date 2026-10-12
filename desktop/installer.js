@@ -78,7 +78,7 @@ module.exports = function registerInstaller(ctx) {
     return {
       dataDir: ctx.root(), free: freeGB(ctx.root()),
       python: py ? `${py.version}` : null, ollama: !!findOllama(), nvidia: hasNvidia(),
-      installed: ctx.ready(), voiceInstalled: ctx.voiceReady(), running,
+      installed: ctx.ready(), voiceInstalled: ctx.voiceReady(), running, problem: ctx.problem(),
     };
   };
 
@@ -157,11 +157,18 @@ module.exports = function registerInstaller(ctx) {
     const R = () => ctx.root();
     const vpy = (venv) => path.join(R(), venv, 'Scripts', 'python.exe');
     const py = findPython();
+    // создаёт окружение; недоделанное (нет pyvenv.cfg или python.exe) удаляет и создаёт заново
+    const ensureVenv = async (name) => {
+      const dir = path.join(R(), name);
+      if (fs.existsSync(vpy(name)) && fs.existsSync(path.join(dir, 'pyvenv.cfg'))) return;
+      if (fs.existsSync(dir)) { ctx.mlog(`окружение ${name} повреждено — пересоздаю`); fs.rmSync(dir, { recursive: true, force: true }); }
+      await run(py.exe, ['-m', 'venv', name]);
+    };
     const ollama = findOllama();
     const list = [
       { id: 'files', title: 'Файлы Юки', w: 1, run: async () => ctx.sync() },
       { id: 'venv', title: 'Окружение Python', w: 3, run: async () => {
-        if (!fs.existsSync(vpy('.venv'))) await run(py.exe, ['-m', 'venv', '.venv']);
+        await ensureVenv('.venv');
         await run(vpy('.venv'), ['-m', 'pip', 'install', '--upgrade', 'pip']);
       } },
       { id: 'torch', title: 'Нейросетевой движок PyTorch', w: 14, run: async (d) => {
@@ -188,7 +195,7 @@ module.exports = function registerInstaller(ctx) {
     if (voice) {
       list.push(
         { id: 'tts', title: 'Нейро-голос Chatterbox (CUDA)', w: 14, run: async (d) => {
-          if (!fs.existsSync(vpy('.venv-tts'))) await run(py.exe, ['-m', 'venv', '.venv-tts']);
+          await ensureVenv('.venv-tts');
           await run(vpy('.venv-tts'), ['-m', 'pip', 'install', '--upgrade', 'pip']);
           await run(vpy('.venv-tts'), ['-m', 'pip', 'install', 'chatterbox-tts'], pipLine(d));
           // chatterbox тянет CPU-версию torch — меняем на CUDA без зависимостей
@@ -206,7 +213,7 @@ module.exports = function registerInstaller(ctx) {
           fs.rmSync(zip, { force: true });
         } },
         { id: 'sing', title: 'Пение: библиотеки (CUDA)', w: 14, run: async (d) => {
-          if (!fs.existsSync(vpy('.venv-sing'))) await run(py.exe, ['-m', 'venv', '.venv-sing']);
+          await ensureVenv('.venv-sing');
           const P = vpy('.venv-sing');
           await run(P, ['-m', 'pip', 'install', '--upgrade', 'pip']);
           await run(P, ['-m', 'pip', 'install', 'torch==2.4.0', 'torchaudio==2.4.0', '--index-url', 'https://download.pytorch.org/whl/cu121'], pipLine(d));

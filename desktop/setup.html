@@ -101,6 +101,7 @@
 
   <!-- экран 1: проверка и выбор -->
   <section id="prep">
+    <div class="card errbox hidden" id="problem"><b>Нужна починка</b><pre id="problemText"></pre></div>
     <div class="card">
       <h3>Что нужно на компьютере</h3>
       <div class="row" id="rowPy"></div>
@@ -211,7 +212,10 @@
     if (info.installed) {
       $('heroSub').textContent = info.voiceInstalled ? 'Юки уже готова к работе.' : 'Юки готова. Можно доставить пение и голос по образцу.';
     }
-    $('go').textContent = missing ? 'Проверить снова' : (info.installed && !(voice.checked && !info.voiceInstalled) ? 'Запустить Юки' : 'Начать подготовку');
+    $('problem').classList.toggle('hidden', !info.problem);
+    $('problemText').textContent = info.problem || '';
+    $('go').textContent = missing ? 'Проверить снова' : info.problem ? 'Починить'
+      : (info.installed && !(voice.checked && !info.voiceInstalled) ? 'Запустить Юки' : 'Начать подготовку');
     $('pick').disabled = info.installed;
   }
   $('voice').onchange = () => { refresh.touched = true; refresh(info); };
@@ -223,7 +227,7 @@
     if (phase === 'prep') {
       await refresh();
       if (!info.python || !info.ollama) return;
-      if (info.installed && !($('voice').checked && !info.voiceInstalled)) return api.launch();
+      if (info.installed && !info.problem && !($('voice').checked && !info.voiceInstalled)) return api.launch();
     }
     phase = 'run';
     $('prep').classList.add('hidden');

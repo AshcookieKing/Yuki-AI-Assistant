@@ -52,22 +52,31 @@ function syncBackend() {
   fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
 }
 
+// окружение целое: есть и python.exe, и pyvenv.cfg (недоудалённая папка .venv без него не запускается)
+const venvOk = (name) => fs.existsSync(path.join(ROOT, name, 'Scripts', 'python.exe'))
+  && fs.existsSync(path.join(ROOT, name, 'pyvenv.cfg'));
+
 function backendReady() {
-  return fs.existsSync(path.join(ROOT, '.venv', 'Scripts', 'python.exe'))
-    && (!PACKAGED || fs.existsSync(path.join(ROOT, 'data', '.installed')));
+  return venvOk('.venv') && (!PACKAGED || fs.existsSync(path.join(ROOT, 'data', '.installed')));
 }
 
-const voiceReady = () => fs.existsSync(path.join(ROOT, '.venv-sing', 'Scripts', 'python.exe'))
-  && fs.existsSync(path.join(ROOT, '.venv-tts', 'Scripts', 'python.exe'));
+const voiceReady = () => venvOk('.venv-sing') && venvOk('.venv-tts');
+
+// что пошло не так при запуске — показываем в окне подготовки с кнопкой «Починить»
+let startProblem = '';
 
 // окно подготовки — один стилизованный загрузчик, вся установка идёт внутри него (installer.js)
 const installer = require('./installer')({
   root: () => ROOT, setRoot: setDataDir, sync: syncBackend, mlog, ready: backendReady, voiceReady,
+  problem: () => startProblem,
 });
 
 let setupWin = null;
 function openSetup() {
-  if (setupWin) { setupWin.show(); setupWin.focus(); return; }
+  if (setupWin) {
+    if (startProblem && !installer.isRunning()) setupWin.reload();  // показать экран с «Починить»
+    setupWin.show(); setupWin.focus(); return;
+  }
   setupWin = new BrowserWindow({
     width: 860, height: 640, minWidth: 720, minHeight: 560, title: 'Юки — подготовка', frame: false,
     backgroundColor: '#140f26', icon: path.join(__dirname, 'icon.ico'),
@@ -95,7 +104,7 @@ ipcMain.on('setup-launch', async () => {
   if (mascot) { setupWin?.close(); return; }
   setupWin?.hide();
   await startMascot();
-  setupWin?.destroy();
+  if (mascot) setupWin?.destroy();  // не запустилась — окно уже снова показано с «Починить»
 });
 
 // журнал запуска — помогает понять, почему программа не стартовала
@@ -321,12 +330,23 @@ app.whenReady().then(async () => {
 
 async function startMascot() {
   if (!(await ensureBackend())) {
+    if (server) { spawn('taskkill', ['/pid', String(server.pid), '/T', '/F'], { windowsHide: true }); server = null; }
+    let tail = '';
+    try { tail = fs.readFileSync(path.join(ROOT, 'data', 'server.log'), 'utf-8').split(/\r?\n/).filter(Boolean).slice(-6).join('\n'); } catch {}
+    mlog('сервер не запустился: ' + tail);
+    if (PACKAGED) {
+      // вместо тупика — окно подготовки: оно проверит и пересоберёт окружение
+      startProblem = 'Сервер Юки не запустился. Нажми «Починить» — я проверю и доставлю всё нужное.\n\n' + tail;
+      openSetup();
+      return;
+    }
     const { dialog, shell } = require('electron');
     dialog.showErrorBox('Юки', `Сервер не запустился. Подробности в файле:\n${path.join(ROOT, 'data', 'server.log')}`);
     shell.openPath(path.join(ROOT, 'data'));
     app.quit();
     return;
   }
+  startProblem = '';
   createMascot();
 }
 
