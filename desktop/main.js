@@ -45,15 +45,20 @@ function openSetup() {
 }
 
 // установка идёт в обычном видимом окне консоли — пользователь видит каждый шаг
+const setupRunning = {};
 ipcMain.on('setup-run', (_e, script) => {
   if (!['setup.bat', 'setup_voice.bat'].includes(script)) return;
-  // строку команды отдаём cmd как есть: иначе Node экранирует кавычки заголовка как \" и start падает
-  const p = spawn('cmd.exe', ['/c', `start "Установка Юки" cmd /c ${script}`], {
-    cwd: ROOT, detached: true, stdio: 'ignore', windowsVerbatimArguments: true,
+  // повторное нажатие, пока окно установки открыто, второй копии не запускает (иначе они ломают друг другу .venv)
+  if (setupRunning[script]) { mlog(`${script} уже идёт — повторный запуск пропущен`); return; }
+  setupRunning[script] = true;
+  // detached сам открывает отдельное окно консоли (без start и его кавычек);
+  // путь к bat — полный: по короткому имени cmd его не находил
+  const p = spawn('cmd.exe', ['/c', path.join(ROOT, script)], {
+    cwd: ROOT, detached: true, stdio: 'ignore', windowsHide: false,
     env: { ...process.env, YUKI_PACKAGED: '1' },
   });
-  p.on('exit', (c) => mlog(`запуск ${script}: код ${c}`));
-  p.on('error', (e) => mlog(`запуск ${script}: ${e.message}`));
+  p.on('exit', (c) => { setupRunning[script] = false; mlog(`${script} завершён: код ${c}`); });
+  p.on('error', (e) => { setupRunning[script] = false; mlog(`запуск ${script}: ${e.message}`); });
   p.unref();
 });
 ipcMain.handle('setup-ready', () => backendReady());

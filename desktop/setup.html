@@ -37,13 +37,14 @@
   <div id="status"></div>
 </div>
 <script>
-  const { setup } = window;
+  // window.setup выставляет setup-preload.js; своё имя не объявляем — const setup дал бы SyntaxError
+  const api = window.setup;
   const st = document.getElementById('status');
-  document.getElementById('start').onclick = () => { setup.run('setup.bat'); st.textContent = 'Окно установки открыто — следи за ним…'; };
-  document.getElementById('voice').onclick = () => { setup.run('setup_voice.bat'); st.textContent = 'Ставлю голосовые модули в отдельном окне…'; };
-  document.getElementById('run').onclick = () => setup.launch();
+  document.getElementById('start').onclick = () => { api.run('setup.bat'); st.textContent = 'Окно установки открыто — следи за ним…'; };
+  document.getElementById('voice').onclick = () => { api.run('setup_voice.bat'); st.textContent = 'Ставлю голосовые модули в отдельном окне…'; };
+  document.getElementById('run').onclick = () => api.launch();
   setInterval(async () => {
-    if (await setup.ready()) {
+    if (await api.ready()) {
       document.getElementById('run').disabled = false;
       st.textContent = '✅ Всё готово — можно запускать.';
     }
