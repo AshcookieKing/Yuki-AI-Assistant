@@ -4,51 +4,295 @@
 <meta charset="utf-8">
 <title>Юки — подготовка</title>
 <style>
-  :root { --bg: #1b1630; --panel: #241d3d; --text: #f1edff; --muted: #a99fcb; --accent: #ff6fae; --accent2: #8f7bff; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", sans-serif; }
-  .wrap { padding: 28px 32px; }
-  h1 { margin: 0 0 6px; font-size: 24px; }
-  p { color: var(--muted); margin: 6px 0; }
-  ol { padding-left: 20px; } li { margin: 6px 0; }
-  .card { background: var(--panel); border-radius: 14px; padding: 16px 20px; margin: 16px 0; }
-  button { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: 0; border-radius: 10px;
-    padding: 11px 22px; font: 600 15px "Segoe UI", sans-serif; cursor: pointer; margin-right: 8px; }
-  button.secondary { background: rgba(255,255,255,0.1); font-weight: 400; }
-  button:disabled { opacity: 0.4; cursor: default; }
-  #status { margin-top: 14px; min-height: 22px; }
-  a { color: var(--accent); }
+  :root {
+    --bg: #140f26; --bg2: #1d1636; --card: rgba(255,255,255,0.045); --line: rgba(255,255,255,0.08);
+    --text: #f3efff; --muted: #a59bc9; --pink: #ff6fae; --violet: #8f7bff; --ok: #5be3a4; --warn: #ffc56b; --err: #ff6b81;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; overflow: hidden;
+    background: radial-gradient(900px 500px at 85% -10%, rgba(143,123,255,0.25), transparent 60%),
+                radial-gradient(700px 500px at -10% 110%, rgba(255,111,174,0.18), transparent 60%), var(--bg); }
+  .titlebar { height: 38px; display: flex; align-items: center; padding: 0 6px 0 14px; -webkit-app-region: drag; user-select: none; }
+  .titlebar .name { font-size: 12px; color: var(--muted); letter-spacing: .5px; flex: 1; }
+  .titlebar button { -webkit-app-region: no-drag; width: 40px; height: 30px; border: 0; background: transparent; color: var(--muted);
+    border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .titlebar button:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .titlebar button.x:hover { background: #e5485f; color: #fff; }
+  main { height: calc(100% - 38px); padding: 6px 34px 26px; display: flex; flex-direction: column; }
+  .hero { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }
+  .ava { width: 74px; height: 74px; border-radius: 50%; flex: none; padding: 3px; position: relative;
+    background: conic-gradient(from 0deg, var(--pink), var(--violet), var(--pink)); animation: spin 6s linear infinite; }
+  .ava img { width: 100%; height: 100%; border-radius: 50%; background: var(--bg2); display: block; animation: spin 6s linear infinite reverse; }
+  .ava::after { content: ""; position: absolute; inset: -10px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,111,174,.35), transparent); z-index: -1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: .2px; }
+  h1 span { background: linear-gradient(90deg, var(--pink), var(--violet)); -webkit-background-clip: text; color: transparent; }
+  .sub { color: var(--muted); margin-top: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+  .row .grow { flex: 1; min-width: 0; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex: none; }
+  .dot.ok { background: rgba(91,227,164,.15); color: var(--ok); }
+  .dot.no { background: rgba(255,107,129,.15); color: var(--err); }
+  .dot.info { background: rgba(255,197,107,.15); color: var(--warn); }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .path { font-family: Consolas, monospace; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button.btn { border: 0; border-radius: 11px; padding: 9px 16px; font: 600 13.5px "Segoe UI", sans-serif; cursor: pointer; color: #fff;
+    background: rgba(255,255,255,0.09); transition: transform .1s, filter .15s; white-space: nowrap; }
+  button.btn:hover { filter: brightness(1.2); }
+  button.btn:active { transform: scale(.97); }
+  button.btn:disabled { opacity: .4; cursor: default; filter: none; transform: none; }
+  button.primary { background: linear-gradient(135deg, var(--pink), var(--violet)); padding: 13px 30px; font-size: 15px;
+    box-shadow: 0 8px 30px rgba(255,111,174,.25); }
+  label.check { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  label.check input { width: 18px; height: 18px; accent-color: var(--pink); }
+  .footer { margin-top: auto; display: flex; align-items: center; gap: 14px; padding-top: 10px; }
+  .footer .hint { flex: 1; }
+  .warn { color: var(--warn); }
+  .hidden { display: none !important; }
+
+  /* экран прогресса */
+  .big { display: flex; align-items: baseline; gap: 14px; margin: 4px 0 10px; }
+  .pct { font-size: 46px; font-weight: 700; line-height: 1; background: linear-gradient(90deg, var(--pink), var(--violet));
+    -webkit-background-clip: text; color: transparent; min-width: 120px; }
+  .now { min-width: 0; }
+  .now .t { font-size: 16px; font-weight: 600; }
+  .now .d { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; }
+  .bar { height: 12px; border-radius: 99px; background: rgba(255,255,255,0.07); overflow: hidden; margin-bottom: 18px; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width .4s ease;
+    background: linear-gradient(90deg, var(--pink), var(--violet), var(--pink)); background-size: 200% 100%; animation: flow 2.5s linear infinite; }
+  @keyframes flow { to { background-position: -200% 0; } }
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+  .step { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: var(--muted); }
+  .step .ic { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); flex: none; display: grid; place-items: center; font-size: 11px; }
+  .step.run { color: var(--text); }
+  .step.run .ic { border-color: var(--pink); border-right-color: transparent; animation: spin .8s linear infinite; }
+  .step.done { color: var(--text); }
+  .step.done .ic { border: 0; background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff; }
+  .step.done .ic::after { content: "✓"; }
+  .step.err .ic { border: 0; background: var(--err); color: #fff; }
+  .step.err .ic::after { content: "!"; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; user-select: none; }
+  pre#log { margin: 8px 0 0; height: 130px; overflow: auto; background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font: 11.5px/1.45 Consolas, monospace; color: #c9c0ea; white-space: pre-wrap; word-break: break-all; }
+  .errbox { border-color: rgba(255,107,129,.4); background: rgba(255,107,129,.08); }
+  .errbox pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px Consolas, monospace; color: #ffc3cc; max-height: 120px; overflow: auto; }
+  .done-card { text-align: center; padding: 26px; }
+  .done-card .em { font-size: 40px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Привет! Давай подготовим Юки 🌸</h1>
-  <p>Это нужно один раз. Займёт 15–40 минут и около 15 ГБ места.</p>
-  <div class="card">
-    <ol>
-      <li>Нажми <b>«Начать подготовку»</b> — откроется окно установки.</li>
-      <li>Если не хватает Python или Ollama, откроются их официальные сайты — установи их (у Python поставь галочку
-        <b>Add python.exe to PATH</b>) и нажми «Начать подготовку» ещё раз.</li>
-      <li>Дождись надписи «Готово» в окне установки и нажми здесь <b>«Запустить Юки»</b>.</li>
-    </ol>
-  </div>
-  <button id="start">Начать подготовку</button>
-  <button id="voice" class="secondary">Пение и нейро-голос (+6 ГБ, NVIDIA)</button>
-  <button id="run" disabled>Запустить Юки</button>
-  <div id="status"></div>
+<div class="titlebar">
+  <div class="name">ЮКИ · ПОДГОТОВКА</div>
+  <button onclick="api.window('min')" title="Свернуть">—</button>
+  <button class="x" onclick="api.window('close')" title="Закрыть">✕</button>
 </div>
+
+<main>
+  <div class="hero">
+    <div class="ava"><img src="icon.png" alt=""></div>
+    <div>
+      <h1>Привет! Я <span>Юки</span></h1>
+      <div class="sub" id="heroSub">Давай подготовим всё для работы — это нужно один раз.</div>
+    </div>
+  </div>
+
+  <!-- экран 1: проверка и выбор -->
+  <section id="prep">
+    <div class="card">
+      <h3>Что нужно на компьютере</h3>
+      <div class="row" id="rowPy"></div>
+      <div class="row" id="rowOllama"></div>
+      <div class="row" id="rowGpu"></div>
+    </div>
+    <div class="card">
+      <h3>Куда поставить модели и данные</h3>
+      <div class="row">
+        <div class="grow">
+          <div class="path" id="dir"></div>
+          <div class="hint" id="space"></div>
+        </div>
+        <button class="btn" id="pick">Изменить…</button>
+      </div>
+    </div>
+    <div class="card">
+      <label class="check"><input type="checkbox" id="voice">
+        <div><b>Пение и голос по образцу</b> <span class="hint">— ещё ~12 ГБ и 10–20 минут, нужна видеокарта NVIDIA</span></div>
+      </label>
+    </div>
+  </section>
+
+  <!-- экран 2: прогресс -->
+  <section id="prog" class="hidden">
+    <div class="big">
+      <div class="pct" id="pct">0%</div>
+      <div class="now"><div class="t" id="nowT">Начинаю…</div><div class="d" id="nowD"></div></div>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="steps" id="steps"></div>
+    <div class="card errbox hidden" id="err" style="margin-top:14px">
+      <b>Что-то пошло не так</b>
+      <pre id="errText"></pre>
+    </div>
+    <details id="det"><summary>Подробности установки</summary><pre id="log"></pre></details>
+  </section>
+
+  <!-- экран 3: готово -->
+  <section id="done" class="hidden">
+    <div class="card done-card">
+      <div class="em">🌸</div>
+      <h2 style="margin:6px 0">Всё готово!</h2>
+      <div class="hint">Юки появится в углу экрана. Настройки — двойной клик по значку в трее.</div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <div class="hint" id="foot">Займёт 15–40 минут, нужен интернет.</div>
+    <button class="btn primary" id="go">Начать подготовку</button>
+  </div>
+</main>
+
 <script>
-  // window.setup выставляет setup-preload.js; своё имя не объявляем — const setup дал бы SyntaxError
-  const api = window.setup;
-  const st = document.getElementById('status');
-  document.getElementById('start').onclick = () => { api.run('setup.bat'); st.textContent = 'Окно установки открыто — следи за ним…'; };
-  document.getElementById('voice').onclick = () => { api.run('setup_voice.bat'); st.textContent = 'Ставлю голосовые модули в отдельном окне…'; };
-  document.getElementById('run').onclick = () => api.launch();
-  setInterval(async () => {
-    if (await api.ready()) {
-      document.getElementById('run').disabled = false;
-      st.textContent = '✅ Всё готово — можно запускать.';
+  // window.yukiSetup выставляет setup-preload.js
+  const api = window.yukiSetup;
+  const $ = (id) => document.getElementById(id);
+  let info = null;
+  let phase = 'prep';   // prep | run | error | done
+  const stepEls = {};
+  const titles = {};
+
+  function row(el, ok, kind, title, hint, action) {
+    el.innerHTML = '';
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + kind;
+    dot.textContent = kind === 'ok' ? '✓' : kind === 'no' ? '✕' : 'i';
+    const g = document.createElement('div');
+    g.className = 'grow';
+    g.innerHTML = `<div>${title}</div>` + (hint ? `<div class="hint">${hint}</div>` : '');
+    el.append(dot, g);
+    if (action) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = action[0];
+      b.onclick = action[1];
+      el.append(b);
     }
-  }, 2000);
+  }
+
+  async function refresh(fresh) {
+    info = fresh || await api.info();
+    row($('rowPy'), !!info.python, info.python ? 'ok' : 'no',
+      info.python ? `Python ${info.python}` : 'Python 3.11 не найден',
+      info.python ? '' : 'Установи его и при установке поставь галочку <b>Add python.exe to PATH</b>',
+      info.python ? null : ['Скачать Python', () => api.open('python')]);
+    row($('rowOllama'), info.ollama, info.ollama ? 'ok' : 'no',
+      info.ollama ? 'Ollama — «мозг» Юки' : 'Ollama не найдена',
+      info.ollama ? '' : 'Скачай, установи и запусти её',
+      info.ollama ? null : ['Скачать Ollama', () => api.open('ollama')]);
+    row($('rowGpu'), info.nvidia, info.nvidia ? 'ok' : 'info',
+      info.nvidia ? 'Видеокарта NVIDIA' : 'Видеокарта NVIDIA не найдена',
+      info.nvidia ? '' : 'Юки будет работать, но пение и голос по образцу недоступны');
+    $('dir').textContent = info.dataDir;
+    $('dir').title = info.dataDir;
+    const voice = $('voice');
+    voice.disabled = !info.nvidia || info.voiceInstalled;
+    if (info.voiceInstalled) voice.checked = true;
+    else if (!refresh.touched) voice.checked = info.nvidia;
+    // в папку данных: окружение Python ~4 ГБ, голосовые модули ~12 ГБ (модели мозга Ollama хранит у себя)
+    const need = (info.installed ? 0 : 4) + (voice.checked && !info.voiceInstalled ? 12 : 0);
+    const free = info.free;
+    $('space').innerHTML = free == null ? '' :
+      (free < need ? `<span class="warn">Свободно ${free} ГБ, а нужно около ${need} ГБ — выбери другой диск</span>`
+                   : `Свободно ${free} ГБ · нужно около ${need} ГБ`)
+      + (info.installed ? '' : '<br>Мозг (~7 ГБ) Ollama хранит в своей папке на системном диске.');
+    const missing = !info.python || !info.ollama;
+    if (info.installed) {
+      $('heroSub').textContent = info.voiceInstalled ? 'Юки уже готова к работе.' : 'Юки готова. Можно доставить пение и голос по образцу.';
+    }
+    $('go').textContent = missing ? 'Проверить снова' : (info.installed && !(voice.checked && !info.voiceInstalled) ? 'Запустить Юки' : 'Начать подготовку');
+    $('pick').disabled = info.installed;
+  }
+  $('voice').onchange = () => { refresh.touched = true; refresh(info); };
+  $('pick').onclick = async () => refresh(await api.pickDir());
+
+  $('go').onclick = async () => {
+    if (phase === 'done') return api.launch();
+    if (phase === 'run') return;
+    if (phase === 'prep') {
+      await refresh();
+      if (!info.python || !info.ollama) return;
+      if (info.installed && !($('voice').checked && !info.voiceInstalled)) return api.launch();
+    }
+    phase = 'run';
+    $('prep').classList.add('hidden');
+    $('err').classList.add('hidden');
+    $('prog').classList.remove('hidden');
+    $('go').disabled = true;
+    $('go').textContent = 'Идёт подготовка…';
+    $('foot').textContent = 'Можно свернуть окно — я сама всё поставлю.';
+    api.start({ voice: $('voice').checked && info.nvidia && !info.voiceInstalled });
+  };
+
+  const log = $('log');
+  function addLog(line) {
+    const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+    log.textContent += line + '\n';
+    if (log.textContent.length > 60000) log.textContent = log.textContent.slice(-40000);
+    if (atEnd) log.scrollTop = log.scrollHeight;
+  }
+
+  api.onEvent((m) => {
+    if (m.type === 'plan') {
+      $('steps').innerHTML = '';
+      for (const s of m.steps) {
+        const el = document.createElement('div');
+        el.className = 'step';
+        el.innerHTML = `<div class="ic"></div><div>${s.title}</div>`;
+        $('steps').append(el);
+        stepEls[s.id] = el;
+        titles[s.id] = s.title;
+      }
+    } else if (m.type === 'step') {
+      const el = stepEls[m.id];
+      if (el) el.className = 'step ' + m.state;
+      if (m.state === 'run') { $('nowT').textContent = titles[m.id]; $('nowD').textContent = ''; }
+    } else if (m.type === 'progress') {
+      const p = Math.min(100, Math.floor(m.overall * 100));
+      $('pct').textContent = p + '%';
+      $('bar').style.width = Math.max(2, m.overall * 100) + '%';
+      if (m.detail) $('nowD').textContent = m.detail;
+      document.title = `Юки — подготовка ${p}%`;
+    } else if (m.type === 'log') {
+      addLog(m.line);
+    } else if (m.type === 'error') {
+      phase = 'error';
+      for (const el of Object.values(stepEls)) if (el.classList.contains('run')) el.className = 'step err';
+      $('err').classList.remove('hidden');
+      $('errText').textContent = m.message;
+      $('nowT').textContent = 'Подготовка остановилась';
+      $('go').disabled = false;
+      $('go').textContent = 'Повторить';
+      $('foot').textContent = 'Уже скачанное не потеряется — продолжу с того же места.';
+      if (!$('prog').classList.contains('hidden')) $('det').open = true;
+      else { $('foot').textContent = m.message; phase = 'prep'; }
+    } else if (m.type === 'done') {
+      phase = 'done';
+      $('pct').textContent = '100%';
+      $('bar').style.width = '100%';
+      $('prog').classList.add('hidden');
+      $('done').classList.remove('hidden');
+      $('go').disabled = false;
+      $('go').textContent = 'Запустить Юки';
+      $('foot').textContent = '';
+      document.title = 'Юки — готово';
+    }
+  });
+
+  refresh();
+  // пока пользователь ставит Python/Ollama — проверяем сами, без кнопки
+  setInterval(() => { if (phase === 'prep' && info && (!info.python || !info.ollama)) refresh(); }, 4000);
 </script>
 </body>
 </html>

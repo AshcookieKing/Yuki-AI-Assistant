@@ -23,6 +23,7 @@
     },
     "files": [
       "main.js",
+      "installer.js",
       "preload.js",
       "setup-preload.js",
       "setup.html",
@@ -69,6 +70,7 @@
       "shortcutName": "Юки",
       "uninstallDisplayName": "Юки — ИИ-ассистент",
       "artifactName": "Yuki-Setup-${version}.exe",
+      "include": "installer.nsh",
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico"
     }

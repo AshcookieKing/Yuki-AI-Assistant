@@ -7,12 +7,35 @@ const fs = require('fs');
 const http = require('http');
 
 // В установленной версии код сервера лежит в resources/backend, а всё рабочее (Python, модели, память)
-// — в %LOCALAPPDATA%\Yuki\backend: так работает при любой папке установки и обновления не стирают память.
+// — в отдельной папке данных (не внутри папки программы: деинсталлятор и обновления её стирают).
+// Папку выбирает пользователь в окне подготовки, путь хранится в %APPDATA%\Yuki\config.json.
 const PACKAGED = app.isPackaged;
-const ROOT = PACKAGED ? path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'Yuki', 'backend')
-  : path.resolve(__dirname, '..');
+const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
+const LEGACY_ROOT = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'Yuki', 'backend');
+
+function defaultDataDir() {
+  if (fs.existsSync(path.join(LEGACY_ROOT, 'data', '.installed'))) return LEGACY_ROOT;
+  // программа стоит не в профиле (например D:\Yuki) — данные рядом, на том же диске: D:\YukiData
+  const installDir = path.dirname(process.execPath);
+  const local = (process.env.LOCALAPPDATA || '').toLowerCase();
+  if (local && !installDir.toLowerCase().startsWith(local)) return path.join(path.dirname(installDir), 'YukiData');
+  return LEGACY_ROOT;
+}
+
+function loadDataDir() {
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')).dataDir || defaultDataDir(); } catch { return defaultDataDir(); }
+}
+
+let ROOT = PACKAGED ? loadDataDir() : path.resolve(__dirname, '..');
 const URL = 'http://127.0.0.1:8765';
-const STATE_FILE = path.join(ROOT, 'data', 'window.json');
+const stateFile = () => path.join(ROOT, 'data', 'window.json');
+
+function setDataDir(dir) {
+  ROOT = dir;
+  fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ dataDir: dir }, null, 2));
+  mlog('папка данных: ' + dir);
+}
 
 function syncBackend() {
   if (!PACKAGED) return;
@@ -34,36 +57,42 @@ function backendReady() {
     && (!PACKAGED || fs.existsSync(path.join(ROOT, 'data', '.installed')));
 }
 
+const voiceReady = () => fs.existsSync(path.join(ROOT, '.venv-sing', 'Scripts', 'python.exe'))
+  && fs.existsSync(path.join(ROOT, '.venv-tts', 'Scripts', 'python.exe'));
+
+// окно подготовки — один стилизованный загрузчик, вся установка идёт внутри него (installer.js)
+const installer = require('./installer')({
+  root: () => ROOT, setRoot: setDataDir, sync: syncBackend, mlog, ready: backendReady, voiceReady,
+});
+
 let setupWin = null;
 function openSetup() {
+  if (setupWin) { setupWin.show(); setupWin.focus(); return; }
   setupWin = new BrowserWindow({
-    width: 760, height: 560, title: 'Юки — подготовка', backgroundColor: '#1b1630', autoHideMenuBar: true,
+    width: 860, height: 640, minWidth: 720, minHeight: 560, title: 'Юки — подготовка', frame: false,
+    backgroundColor: '#140f26', icon: path.join(__dirname, 'icon.ico'),
     webPreferences: { preload: path.join(__dirname, 'setup-preload.js') },
   });
   setupWin.loadFile(path.join(__dirname, 'setup.html'));
+  setupWin.on('close', (e) => {
+    if (!installer.isRunning()) return;
+    const { dialog } = require('electron');
+    const r = dialog.showMessageBoxSync(setupWin, {
+      type: 'warning', buttons: ['Продолжить установку', 'Прервать'], defaultId: 0, cancelId: 0,
+      title: 'Юки', message: 'Подготовка ещё идёт. Прервать?', detail: 'Потом можно будет продолжить с того же места.',
+    });
+    if (r === 0) e.preventDefault(); else installer.cancel();
+  });
   setupWin.on('closed', () => { mlog('окно подготовки закрыто'); setupWin = null; if (!mascot) app.quit(); });
 }
 
-// установка идёт в обычном видимом окне консоли — пользователь видит каждый шаг
-const setupRunning = {};
-ipcMain.on('setup-run', (_e, script) => {
-  if (!['setup.bat', 'setup_voice.bat'].includes(script)) return;
-  // повторное нажатие, пока окно установки открыто, второй копии не запускает (иначе они ломают друг другу .venv)
-  if (setupRunning[script]) { mlog(`${script} уже идёт — повторный запуск пропущен`); return; }
-  setupRunning[script] = true;
-  // detached сам открывает отдельное окно консоли (без start и его кавычек);
-  // путь к bat — полный: по короткому имени cmd его не находил
-  const p = spawn('cmd.exe', ['/c', path.join(ROOT, script)], {
-    cwd: ROOT, detached: true, stdio: 'ignore', windowsHide: false,
-    env: { ...process.env, YUKI_PACKAGED: '1' },
-  });
-  p.on('exit', (c) => { setupRunning[script] = false; mlog(`${script} завершён: код ${c}`); });
-  p.on('error', (e) => { setupRunning[script] = false; mlog(`запуск ${script}: ${e.message}`); });
-  p.unref();
+ipcMain.on('setup-window', (_e, cmd) => {
+  if (cmd === 'min') setupWin?.minimize();
+  if (cmd === 'close') setupWin?.close();
 });
-ipcMain.handle('setup-ready', () => backendReady());
 ipcMain.on('setup-launch', async () => {
   if (!backendReady()) return;
+  if (mascot) { setupWin?.close(); return; }
   setupWin?.hide();
   await startMascot();
   setupWin?.destroy();
@@ -114,13 +143,13 @@ async function ensureBackend() {
 }
 
 function loadState() {
-  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')); } catch { return {}; }
+  try { return JSON.parse(fs.readFileSync(stateFile(), 'utf-8')); } catch { return {}; }
 }
 function saveState() {
   if (!mascot) return;
   const [x, y] = mascot.getPosition();
   const [width, height] = mascot.getSize();
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ x, y, width, height }));
+  fs.writeFileSync(stateFile(), JSON.stringify({ x, y, width, height }));
 }
 
 function defaultBounds() {
@@ -171,6 +200,7 @@ function menuTemplate() {
     { label: 'Поверх всех окон', type: 'checkbox', checked: onTop, click: (i) => setOnTop(i.checked, true) },
     { label: 'Вернуть в угол экрана', click: () => { mascot?.setBounds(defaultBounds()); saveState(); } },
     { label: 'Перезагрузить', click: () => mascot?.reload() },
+    ...(PACKAGED ? [{ label: voiceReady() ? 'Подготовка и модули…' : 'Установить пение и нейро-голос…', click: openSetup }] : []),
     { type: 'separator' },
     updateState === 'готово'
       ? { label: 'Установить обновление и перезапустить', click: () => updater?.quitAndInstall(true, true) }
@@ -282,7 +312,8 @@ app.whenReady().then(async () => {
   tray.on('double-click', openPanel);
 
   initUpdater();
-  try { syncBackend(); } catch (e) { mlog('syncBackend: ' + e); }
+  // свежий код из установщика — только в уже подготовленную папку (новую заполнит окно подготовки)
+  if (backendReady()) { try { syncBackend(); } catch (e) { mlog('syncBackend: ' + e); } }
   mlog(`backendReady=${backendReady()}`);
   if (!backendReady()) { openSetup(); return; }
   await startMascot();
