@@ -18,20 +18,48 @@
     "appId": "com.ashcookieking.yuki",
     "productName": "Yuki",
     "executableName": "Yuki",
-    "directories": { "output": "../release" },
-    "files": ["main.js", "preload.js", "setup-preload.js", "setup.html", "icon.png", "icon.ico", "package.json"],
+    "directories": {
+      "output": "../release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "setup-preload.js",
+      "setup.html",
+      "icon.png",
+      "icon.ico",
+      "package.json"
+    ],
     "extraResources": [
       {
         "from": "..",
         "to": "backend",
         "filter": [
-          "server.py", "requirements.txt", "setup.bat", "setup_voice.bat",
-          "assistant/**/*", "static/**/*", "singer/worker.py", "singer/tts_worker.py",
-          "!**/__pycache__/**", "!static/models/*.vrm"
+          "server.py",
+          "requirements.txt",
+          "setup.bat",
+          "setup_voice.bat",
+          "assistant/**/*",
+          "static/**/*",
+          "singer/worker.py",
+          "singer/tts_worker.py",
+          "!**/__pycache__/**",
+          "!static/models/*.vrm"
         ]
       }
     ],
-    "win": { "target": "nsis", "icon": "icon.ico" },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AshcookieKing",
+        "repo": "Yuki-AI-Assistant",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -44,5 +72,8 @@
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

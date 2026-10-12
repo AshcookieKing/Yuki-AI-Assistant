@@ -162,8 +162,63 @@ function menuTemplate() {
     { label: 'Вернуть в угол экрана', click: () => { mascot?.setBounds(defaultBounds()); saveState(); } },
     { label: 'Перезагрузить', click: () => mascot?.reload() },
     { type: 'separator' },
+    updateState === 'готово'
+      ? { label: 'Установить обновление и перезапустить', click: () => updater?.quitAndInstall(true, true) }
+      : { label: updateState ? `Обновление: ${updateState}` : `Проверить обновления (v${app.getVersion()})`,
+          enabled: !updateState, click: () => checkUpdates(true) },
+    { type: 'separator' },
     { label: 'Выход', click: () => app.quit() },
   ];
+}
+
+// ---------- автообновление с GitHub Releases ----------
+// при запуске и раз в 4 часа смотрим latest.yml последнего релиза; новая версия качается в фоне,
+// потом спрашиваем, перезапустить ли сейчас (иначе поставится при выходе)
+let updater = null;
+let updateState = '';  // '', 'проверка', 'скачивается N%', 'готово'
+function setUpdateState(s) {
+  updateState = s;
+  tray?.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
+}
+
+function initUpdater() {
+  if (!PACKAGED) return;
+  try { ({ autoUpdater: updater } = require('electron-updater')); } catch (e) { mlog('updater: ' + e); return; }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.logger = { info: (m) => mlog('upd: ' + m), warn: (m) => mlog('upd! ' + m), error: (m) => mlog('upd ERR ' + m), debug: () => {} };
+  updater.on('checking-for-update', () => setUpdateState('проверка'));
+  updater.on('update-not-available', () => setUpdateState(''));
+  updater.on('update-available', (i) => { mlog('найдена версия ' + i.version); setUpdateState('скачивается'); });
+  updater.on('download-progress', (p) => setUpdateState(`скачивается ${Math.round(p.percent)}%`));
+  updater.on('error', (e) => { mlog('ошибка обновления: ' + (e?.message || e)); setUpdateState(''); });
+  updater.on('update-downloaded', async (i) => {
+    setUpdateState('готово');
+    const { dialog } = require('electron');
+    const r = await dialog.showMessageBox({
+      type: 'info', title: 'Юки — обновление', buttons: ['Перезапустить сейчас', 'Позже'], defaultId: 0, cancelId: 1,
+      message: `Скачана новая версия Юки ${i.version}.`,
+      detail: 'Перезапустить и установить сейчас? Если выбрать «Позже», обновление поставится при выходе.',
+    });
+    if (r.response === 0) updater.quitAndInstall(true, true);
+  });
+  checkUpdates();
+  setInterval(checkUpdates, 4 * 60 * 60 * 1000);
+}
+
+function checkUpdates(manual = false) {
+  if (!updater) {
+    if (manual) require('electron').dialog.showMessageBox({ title: 'Юки', message: 'Обновления работают только в установленной версии.' });
+    return;
+  }
+  updater.checkForUpdates().then((r) => {
+    if (manual && (!r || !r.isUpdateAvailable)) {
+      require('electron').dialog.showMessageBox({ title: 'Юки', message: `У тебя последняя версия (${app.getVersion()}).` });
+    }
+  }).catch((e) => {
+    mlog('проверка обновлений: ' + (e?.message || e));
+    if (manual) require('electron').dialog.showErrorBox('Юки', 'Не удалось проверить обновления: ' + (e?.message || e));
+  });
 }
 
 function setOnTop(v, persist) {
@@ -216,6 +271,7 @@ app.whenReady().then(async () => {
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
   tray.on('double-click', openPanel);
 
+  initUpdater();
   try { syncBackend(); } catch (e) { mlog('syncBackend: ' + e); }
   mlog(`backendReady=${backendReady()}`);
   if (!backendReady()) { openSetup(); return; }
