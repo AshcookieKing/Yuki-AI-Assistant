@@ -47,9 +47,14 @@ function openSetup() {
 // установка идёт в обычном видимом окне консоли — пользователь видит каждый шаг
 ipcMain.on('setup-run', (_e, script) => {
   if (!['setup.bat', 'setup_voice.bat'].includes(script)) return;
-  spawn('cmd.exe', ['/c', 'start', '"Установка Юки"', 'cmd', '/c', script], {
-    cwd: ROOT, detached: true, stdio: 'ignore', env: { ...process.env, YUKI_PACKAGED: '1' },
-  }).unref();
+  // строку команды отдаём cmd как есть: иначе Node экранирует кавычки заголовка как \" и start падает
+  const p = spawn('cmd.exe', ['/c', `start "Установка Юки" cmd /c ${script}`], {
+    cwd: ROOT, detached: true, stdio: 'ignore', windowsVerbatimArguments: true,
+    env: { ...process.env, YUKI_PACKAGED: '1' },
+  });
+  p.on('exit', (c) => mlog(`запуск ${script}: код ${c}`));
+  p.on('error', (e) => mlog(`запуск ${script}: ${e.message}`));
+  p.unref();
 });
 ipcMain.handle('setup-ready', () => backendReady());
 ipcMain.on('setup-launch', async () => {
