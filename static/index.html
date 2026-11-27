@@ -154,6 +154,17 @@
   </section>
 
   <section data-panel="voice">
+    <label class="check"><input type="checkbox" data-key="omni_enabled"> Облачный голос Qwen3.8-Omni (Cici) — слышит и отвечает сама, очень быстро и живо. Без интернета — локальный голос</label>
+    <label>Ключ DashScope (Alibaba Cloud Model Studio → API Keys)
+      <input type="password" data-key="omni_key" placeholder="sk-..." autocomplete="off"></label>
+    <label>ID рабочего пространства (если есть)
+      <input type="text" data-key="omni_workspace" placeholder="ws-..."></label>
+    <label>Голос облака
+      <select data-key="omni_voice">
+        <option value="Cici">Cici — живой, милый, мягкий</option>
+        <option value="Tina">Tina — по умолчанию</option>
+      </select></label>
+    <button type="button" id="omniCheck">Проверить облако</button> <span id="omniState" class="hint"></span>
     <label>Движок
       <select data-key="tts_engine">
         <option value="espeech">ESpeech — живой русский нейро-голос, офлайн (рекомендуется)</option>

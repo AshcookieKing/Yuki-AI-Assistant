@@ -114,3 +114,16 @@
 - Установщик сам выбирает мозг (VRAM≥8 и ОЗУ≥24 → Qwen3.6 сжатая с HF, иначе qwen3.5:9b), ставит ESpeech.
 - ⚠️ На C: осталось ~4 ГБ (модели Ollama там ~41 ГБ). Кандидаты на удаление: qwen3:8b, saiga, dolphin, gemma3 — спросить.
 - Живой проверки в приложении не было (пользователь играл в Arma).
+
+## Сессия 28.11.2026 — облачный голос Qwen3.8-Omni (не опубликовано, не проверено с настоящим ключом)
+
+- `assistant/omni.py`: клиент `qwen3.8-omni-flash-realtime` (WebSocket, ручной режим turn_detection=null), голос Cici,
+  инструменты ПК через function calling, звук отдаётся окну кусками WAV 24 кГц (0.6 с, потом по 2 с) с подписями.
+  Адрес: omni_url → иначе `wss://{omni_workspace}.ap-southeast-1.maas.aliyuncs.com/api-ws/v1/realtime` → иначе
+  `wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime` (последний по документации не подтверждён — проверить).
+- server.py: `/api/stt` запоминает WAV фразы, `Hub.omni_turn` → при любой ошибке `omni.mark_down` (60 с) и локальный ответ.
+  `/api/omni/check`. Настройки omni_* во вкладке «Голос».
+- Проверено на локальной заглушке протокола (scratchpad omni_test.py): событие, ключ, инструмент, весь звук; откат на локальный.
+- Неизвестно: принимает ли облако текстовый ввод `conversation.item.create` message/input_text (для набранных реплик).
+- Мягкий локальный голос: начаты варианты в `voice_samples/soft` (CPU, 3 из 5 готовы), фильтр `soften()` в scratchpad —
+  не встроено.

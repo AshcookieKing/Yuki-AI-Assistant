@@ -125,6 +125,7 @@ class Hub:
         self.singing = False
         self.last_reply_at = 0.0   # когда она в последний раз говорила — после этого 30 с слушает без имени
         self.last_reply_text = ""
+        self.last_audio = (0.0, b"")   # последняя фраза с микрофона (WAV) — для облачного голосового режима
 
     async def emit(self, msg):
         if msg.get("type") in ("done", "speech"):
@@ -200,7 +201,38 @@ class Hub:
             await self.stop_current()
             self.stop = asyncio.Event()
             await self.emit({"type": "user", "text": text, "hidden": hidden})
-            self.task = asyncio.create_task(self.brain.respond(text, self.emit, self.confirm, self.stop, hidden))
+            from assistant import omni
+            if omni.active() and not hidden:
+                ts, wav = self.last_audio
+                wav = wav if (voice and time.time() - ts < 30) else None
+                self.task = asyncio.create_task(self.omni_turn(text, wav))
+            else:
+                self.task = asyncio.create_task(self.brain.respond(text, self.emit, self.confirm, self.stop, hidden))
+
+    async def omni_turn(self, text, wav):
+        """Ход через облако Qwen Omni (голос Cici). Любая ошибка — тут же отвечаем локально."""
+        from assistant import knowledge, memory as mem, omni
+        b = self.brain
+        b.history.append({"role": "user", "content": text})
+        try:
+            memories, notes = await asyncio.gather(
+                mem.search(text) if settings.get().get("memory_enabled", True) else asyncio.sleep(0, []),
+                knowledge.search(text))
+            reply = await omni.respond(self, text, wav, memories or [], notes or [])
+            if reply:
+                b.history.append({"role": "assistant", "content": reply})
+                async def learned(items):
+                    await self.emit({"type": "memory", "items": items})
+                asyncio.create_task(mem.learn(text, reply, learned))
+            b._trim()
+            mem.save_history(b.history)
+            await self.emit({"type": "done"})
+        except Exception as e:
+            b.history.pop() if b.history and b.history[-1].get("content") == text else None
+            omni.mark_down(str(e))
+            await self.emit({"type": "error", "text": f"Облако Qwen Omni недоступно ({str(e)[:120]}) — отвечаю сама, без интернета."})
+            self.stop = asyncio.Event()
+            await self.brain.respond(text, self.emit, self.confirm, self.stop, False)
 
     async def autonomy(self, minutes):
         """Она сама решает заговорить: смотрит на экран (если разрешено), вспоминает, о чём говорили."""
@@ -399,6 +431,21 @@ async def post_memory(req: Request):
     return {"ok": True}
 
 
+@app.get("/api/omni/check")
+async def omni_check():
+    """Проверка облачного режима: подключение и ключ."""
+    from assistant import omni
+    if not settings.get().get("omni_key", "").strip():
+        return {"ok": False, "error": "Не указан ключ DashScope"}
+    try:
+        await omni.close()
+        await omni._connect()
+        await omni.close()
+        return {"ok": True, "url": omni.url().split("?")[0]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
+
 @app.get("/api/knowledge")
 async def get_knowledge():
     from assistant import knowledge
@@ -468,6 +515,7 @@ async def voice_ref():
 @app.post("/api/stt")
 async def api_stt(req: Request):
     data = await req.body()
+    hub.last_audio = (time.time(), data)
     try:
         text = await asyncio.to_thread(stt.transcribe, data)
     except Exception as e:

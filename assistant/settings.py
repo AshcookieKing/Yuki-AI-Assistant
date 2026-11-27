@@ -67,6 +67,13 @@ DEFAULTS = {
     "embed_model": "embeddinggemma:300m",
     "knowledge_enabled": True,     # учиться на заметках Obsidian (поиск по смыслу, локально)
     "obsidian_vault": "",          # путь к хранилищу Obsidian (пусто — data/vault)
+    # Облачный голосовой режим: Qwen3.8-Omni-Flash-Realtime (слышит и отвечает голосом сама)
+    "omni_enabled": False,
+    "omni_key": "",                # ключ DashScope (Alibaba Cloud Model Studio) — вводит пользователь
+    "omni_workspace": "",          # ID рабочего пространства (если ключ привязан к нему)
+    "omni_url": "",                # свой адрес WebSocket (пусто — международный по умолчанию)
+    "omni_model": "qwen3.8-omni-flash-realtime",
+    "omni_voice": "Cici",          # Cici — живой, милый, мягкий; Tina — по умолчанию
     # LLM
     "ollama_url": "http://127.0.0.1:11434",
     "llm_provider": "ollama",      # ollama | groq | gemini | openrouter

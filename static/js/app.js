@@ -700,3 +700,12 @@ async function wake() {
 })();
 
 $('startBtn').onclick = wake;
+
+// облачный голос Qwen Omni: проверка ключа и подключения
+if ($('omniCheck')) $('omniCheck').onclick = async () => {
+  $('omniState').textContent = 'Проверяю…';
+  try {
+    const j = await (await fetch('/api/omni/check')).json();
+    $('omniState').textContent = j.ok ? '✓ Облако подключено' : '✗ ' + (j.error || 'не удалось');
+  } catch (e) { $('omniState').textContent = '✗ ' + e; }
+};
