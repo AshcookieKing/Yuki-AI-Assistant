@@ -120,6 +120,8 @@ module.exports = function registerInstaller(ctx) {
     const tts = path.join(ctx.root(), '.venv-tts');
     if (hasNvidia() && fs.existsSync(path.join(tts, 'pyvenv.cfg')) && !fs.existsSync(path.join(tts, 'Lib', 'site-packages', 'f5_tts')))
       out.push({ id: 'espeech', title: 'Живой голос ESpeech (~2 ГБ)' });
+    if (hasNvidia() && fs.existsSync(path.join(tts, 'pyvenv.cfg')) && !fs.existsSync(path.join(ctx.root(), '.venv-qtts', 'pyvenv.cfg')))
+      out.push({ id: 'qtts', title: 'Голос Ono_Anna — игривая девочка (~8 ГБ)' });
     return out;
   };
 
@@ -291,6 +293,7 @@ module.exports = function registerInstaller(ctx) {
           setSetting(R(), 'tts_engine', 'espeech');
         } });
       }
+      if (need.has('qtts')) out.push(steps(true, brainChoice, false).find((x) => x.id === 'qtts'));
       return out;
     }
     if (voice) {
@@ -321,6 +324,7 @@ module.exports = function registerInstaller(ctx) {
           d('Скачиваю голосовую модель Qwen3-TTS…');
           ENV.HF_HOME = path.join(R(), 'data', 'hf');
           await run(Q, ['-c', "from huggingface_hub import snapshot_download as s; s('Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice')"]);
+          setSetting(R(), 'tts_engine', 'qwen3tts');
         } },
         { id: 'seedvc', title: 'Перенос голоса и пение — Seed-VC', w: 3, run: async (d) => {
           const singer = path.join(R(), 'singer');

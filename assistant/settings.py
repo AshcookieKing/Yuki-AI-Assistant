@@ -101,7 +101,7 @@ DEFAULTS = {
     "followup_seconds": 30,        # после её ответа столько секунд можно говорить без имени
     "barge_in": True,              # перебивать её голосом
     # Голос
-    "tts_engine": "espeech",       # espeech (живой русский нейро-голос, офлайн) | chatterbox | edge | silero
+    "tts_engine": "qwen3tts",      # qwen3tts (Ono_Anna, игривая) | espeech (живой русский нейро-голос, офлайн) | chatterbox | edge | silero
     "silero_model": "v5_ru",
     "silero_speaker": "baya",
     "edge_voice": "ru-RU-SvetlanaNeural",
