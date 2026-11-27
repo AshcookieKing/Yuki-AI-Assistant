@@ -17,3 +17,4 @@ dist/
 .venv-tts/
 release/
 /models/
+.venv-qtts/
