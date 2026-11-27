@@ -320,7 +320,12 @@ module.exports = function registerInstaller(ctx) {
           await run(Q, ['-m', 'pip', 'install', '--upgrade', 'pip']);
           await run(Q, ['-m', 'pip', 'install', 'torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124',
             '--index-url', 'https://download.pytorch.org/whl/cu124'], pipLine(d));
-          await run(Q, ['-m', 'pip', 'install', 'qwen-tts'], pipLine(d));
+          // faster-qwen3-tts (CUDA-графы, в ~5 раз быстрее) + проверенная версия transformers
+          const qc = path.join(R(), 'data', 'qtts_constraints.txt');
+          fs.mkdirSync(path.dirname(qc), { recursive: true });
+          fs.writeFileSync(qc, ['torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124', 'transformers==5.15.1', ''].join('\n'));
+          await run(Q, ['-m', 'pip', 'install', '-c', qc, '--extra-index-url', 'https://download.pytorch.org/whl/cu124',
+            'faster-qwen3-tts', 'transformers==5.15.1'], pipLine(d));
           d('Скачиваю голосовую модель Qwen3-TTS…');
           ENV.HF_HOME = path.join(R(), 'data', 'hf');
           await run(Q, ['-c', "from huggingface_hub import snapshot_download as s; s('Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice')"]);

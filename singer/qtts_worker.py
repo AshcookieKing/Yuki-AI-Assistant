@@ -1,4 +1,4 @@
-"""Голос Qwen3-TTS CustomVoice (Qwen, Apache 2.0, офлайн): готовый тембр Ono_Anna — игривый, лёгкий девичий голос.
+"""Голос Qwen3-TTS CustomVoice (ускорение faster-qwen3-tts, CUDA-графы) (Qwen, Apache 2.0, офлайн): готовый тембр Ono_Anna — игривый, лёгкий девичий голос.
 Модель 1.7B понимает инструкцию манеры («игриво, с хитринкой»), 0.6B — легче и быстрее, но без инструкций.
 Отдельное окружение .venv-qtts (нужна своя версия transformers), HTTP 127.0.0.1:8768."""
 import io
@@ -21,13 +21,21 @@ REPOS = {"0.6b": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", "1.7b": "Qwen/Qwen3-TTS
 def model(size):
     if size not in _models:
         import torch
-        from qwen_tts import Qwen3TTSModel
 
         cuda = torch.cuda.is_available()
         _models.clear()  # держим в памяти только одну модель
-        _models[size] = Qwen3TTSModel.from_pretrained(
-            REPOS[size], device_map="cuda:0" if cuda else "cpu",
-            dtype=torch.bfloat16 if cuda else torch.float32, attn_implementation="sdpa")
+        if cuda:
+            # faster-qwen3-tts: шаги генерации захвачены в CUDA-графы — в 6–8 раз быстрее обычного qwen-tts
+            from faster_qwen3_tts import FasterQwen3TTS
+
+            m = FasterQwen3TTS.from_pretrained(REPOS[size], device="cuda", dtype=torch.bfloat16, max_seq_len=1024)
+            m.warmup(prefill_len=100)
+            _models[size] = m
+        else:
+            from qwen_tts import Qwen3TTSModel
+
+            _models[size] = Qwen3TTSModel.from_pretrained(REPOS[size], device_map="cpu", dtype=torch.float32,
+                                                          attn_implementation="sdpa")
     return _models[size]
 
 
