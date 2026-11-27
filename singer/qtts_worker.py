@@ -55,7 +55,9 @@ def _wav(audio, sr):
 def synth(text, size, speaker, instruct, language):
     with _lock:
         m = model(size)
-        kw = {"text": text, "language": language, "speaker": speaker}
+        # предел длины: ~14 символов речи в секунду, 12.5 шагов модели на секунду звука, плюс запас на смешки
+        kw = {"text": text, "language": language, "speaker": speaker,
+              "max_new_tokens": int(12.5 * (len(text) / 9 + 3))}
         if instruct and size != "0.6b":
             kw["instruct"] = instruct
         wavs, sr = m.generate_custom_voice(**kw)

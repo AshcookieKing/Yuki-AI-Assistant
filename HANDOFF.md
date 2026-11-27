@@ -127,3 +127,10 @@
 - Неизвестно: принимает ли облако текстовый ввод `conversation.item.create` message/input_text (для набранных реплик).
 - Мягкий локальный голос: начаты варианты в `voice_samples/soft` (CPU, 3 из 5 готовы), фильтр `soften()` в scratchpad —
   не встроено.
+
+## 28.11 — голос Ono_Anna (Qwen3-TTS 1.7B CustomVoice) по умолчанию
+- `singer/qtts_worker.py` в `.venv-qtts` (порт 8768): faster-qwen3-tts (CUDA-графы) + transformers==5.15.1
+  (5.24 ломает qwen-tts-hf: «property 'upsample' … has no setter»). Эмоция фразы → инструкция манеры (`voice.QTTS_EMO`).
+- Замер без Arma, всё загружено (Qwen3.6 28/72 CPU/GPU + Whisper + голос = 11.8/12 ГБ VRAM): мозг 0.4 с до первого
+  слова, 47 ток/с; голос 1.5–3 с на фразу (RTF ~0.5–0.6), первая после загрузки — дольше.
+- С запущенной Arma (arma3profiling ~22 ГБ commit) мозг не грузится: не хватает памяти Windows.
