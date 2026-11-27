@@ -69,6 +69,18 @@
 5. Обновить README (облако, нейро-голос, установщик), закоммитить всё и запушить; опубликовать установщик:
    `gh release create v1.1.0 dist/Yuki-Setup-1.1.0.exe --title "Юки 1.1" --notes "..."` (репо приватный — согласовать с пользователем).
 
+## Выпуск новой версии (автообновление)
+
+Установленная Юки (electron-updater, `desktop/main.js` → `initUpdater`) при запуске и раз в 4 часа читает
+`latest.yml` последнего релиза на GitHub (репо публичный), качает новую версию в фоне и предлагает перезапуститься
+(или ставит при выходе). В трее — «Проверить обновления». Чтобы выпустить версию:
+1. поднять `version` в `desktop/package.json` (например 1.2.0);
+2. `cd desktop && npx electron-builder --win nsis --publish never`;
+3. `gh release create v1.2.0 release\Yuki-Setup-1.2.0.exe release\Yuki-Setup-1.2.0.exe.blockmap release\latest.yml --title "Юки 1.2" --notes "..."`
+   — **`latest.yml` обязателен**, без него обновление не увидят.
+Код бэкенда обновляется вместе с установщиком (`syncBackend` копирует его в `%LOCALAPPDATA%\Yuki\backend` при запуске);
+если менялся `requirements.txt` — пользователю нужно перезапустить установку библиотек (пока не автоматизировано).
+
 ## Важные правила и грабли
 
 - **Запускать Ollama/Electron/воркеры только с `dangerouslyDisableSandbox: true`** — из песочницы Ollama ловит
@@ -86,4 +98,19 @@
   официальные сайты, а установку делает пользователь). Не клонировать голоса реальных людей/персонажей (например Нейроны).
 - Управление мышью пользователь разрешил явно. Режим доступа сейчас «полный» (`pc_access=full`), необратимые команды — с подтверждением.
 - Пользователь не любит долгие ответы и болтовню: реплики 1–2 предложения, `smart_mode` по умолчанию выключен.
-- Коммиты заканчивать строкой `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- В коммитах, релизах и файлах репозитория — никаких упоминаний Claude (ни Co-Authored-By, ни «Generated with»).
+
+## Сессия 27.11.2026 (версия 1.2.0, собрана, НЕ опубликована)
+
+- Мозг `yuki-qwen3.6` = Qwen3.6 35B-A3B UD-IQ3_XXS (Unsloth GGUF) + mmproj, создан `ollama create` из `models/Modelfile.yuki`
+  (RENDERER/PARSER qwen3.5). Замер: прогретая — первое слово 0.49 с, 25 ток/с, 28%/72% CPU/GPU, tool calls работают.
+  Холодная загрузка ~2.5 мин — поэтому `_warm_llm()` в server.py при старте.
+- Ускорение: системный промпт неизменный (время/память/заметки/активность — `with_context()` перед последней репликой),
+  первая фраза режется по запятой (`pop_sentences(first_phrase=True)`).
+- Голос `tts_engine="espeech"`: ESpeech-TTS-1 RL-V2 (F5-TTS) в `.venv-tts`, RTF 0.34–0.53 на GPU, ~390–450 Гц, Whisper
+  слово в слово. Нужны `datasets<4`, `pyarrow<17` при numpy 1.26. HF_HOME = `data/hf` (на C: мало места).
+  Образец по умолчанию `singer/voice/default_ref.wav/.txt`.
+- База знаний Obsidian: `assistant/knowledge.py`, хранилище `obsidian_vault` (пусто → `data/vault`), индекс `data/knowledge.npz`.
+- Установщик сам выбирает мозг (VRAM≥8 и ОЗУ≥24 → Qwen3.6 сжатая с HF, иначе qwen3.5:9b), ставит ESpeech.
+- ⚠️ На C: осталось ~4 ГБ (модели Ollama там ~41 ГБ). Кандидаты на удаление: qwen3:8b, saiga, dolphin, gemma3 — спросить.
+- Живой проверки в приложении не было (пользователь играл в Arma).

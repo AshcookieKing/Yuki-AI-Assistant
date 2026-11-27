@@ -145,7 +145,8 @@ async def sing(query: str, on_progress) -> dict:
 TTS_URL = "http://127.0.0.1:8767"
 TTS_PYTHON = ROOT / ".venv-tts" / "Scripts" / "python.exe"
 TTS_SCRIPT = ROOT / "singer" / "tts_worker.py"
-TTS_REF = DATA_DIR / "voice_ref_tts.wav"   # образец тембра для Chatterbox (если нет — берём общий)
+TTS_REF = DATA_DIR / "voice_ref_tts.wav"   # свой образец тембра (если нет — встроенный)
+DEFAULT_REF = ROOT / "singer" / "voice" / "default_ref.wav"  # встроенный синтетический образец Юки
 _tts_proc: subprocess.Popen | None = None
 _tts_lock = asyncio.Lock()
 
@@ -173,7 +174,9 @@ async def ensure_tts():
             log = open(DATA_DIR / "tts_worker.log", "a", encoding="utf-8")
             _tts_proc = subprocess.Popen([str(TTS_PYTHON), str(TTS_SCRIPT)], stdout=log, stderr=log,
                                          creationflags=subprocess.CREATE_NO_WINDOW,
-                                         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                                         env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                                              # модели голоса храним в папке данных, а не на системном диске
+                                              "HF_HOME": str(DATA_DIR / "hf")})
         for _ in range(240):
             if await _tts_alive():
                 return
@@ -181,14 +184,32 @@ async def ensure_tts():
         raise RuntimeError("Нейро-голос не запустился, см. data/tts_worker.log")
 
 
+def ref_text() -> str:
+    """Текст, который звучит в образце голоса (нужен ESpeech/F5). Лежит рядом: voice_ref_tts.txt."""
+    p = (TTS_REF if TTS_REF.exists() else DEFAULT_REF).with_suffix(".txt")
+    try:
+        return p.read_text("utf-8").strip()
+    except OSError:
+        return ""
+
+
+def tts_payload(text: str) -> dict:
+    s = settings.get()
+    ref = TTS_REF if TTS_REF.exists() else DEFAULT_REF
+    engine = s.get("tts_engine", "espeech")
+    body = {"engine": "espeech" if engine == "espeech" else "chatterbox", "text": text, "ref": str(ref)}
+    if engine == "espeech":
+        body.update(ref_text=ref_text(), nfe=int(s.get("tts_nfe", 16)), speed=float(s.get("voice_rate", 1.0)))
+    else:
+        body.update(exaggeration=float(s.get("tts_exaggeration", 0.7)), cfg=float(s.get("tts_cfg", 0.35)),
+                    temperature=float(s.get("tts_temperature", 0.8)))
+    return body
+
+
 async def neural_tts(text: str) -> bytes:
     await ensure_tts()
-    s = settings.get()
-    ref = TTS_REF if TTS_REF.exists() else REF
     async with httpx.AsyncClient(timeout=120) as c:
-        r = await c.post(TTS_URL + "/tts", json={
-            "text": text, "ref": str(ref), "exaggeration": float(s.get("tts_exaggeration", 0.7)),
-            "cfg": float(s.get("tts_cfg", 0.35)), "temperature": float(s.get("tts_temperature", 0.8))})
+        r = await c.post(TTS_URL + "/tts", json=tts_payload(text))
     if r.status_code != 200:
         raise RuntimeError(r.text[:200])
     return r.content

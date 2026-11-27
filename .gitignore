@@ -16,3 +16,4 @@ voice_samples/
 dist/
 .venv-tts/
 release/
+/models/

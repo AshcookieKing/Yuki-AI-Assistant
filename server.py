@@ -30,7 +30,8 @@ RECOMMENDED_LLM = [
     {"name": "qwen3:8b", "note": "Прошлая версия (≈5 ГБ)"},
     {"name": "qwen3:14b", "note": "Умнее, но тяжелее (≈9 ГБ VRAM)"},
     {"name": "qwen3:4b", "note": "Быстрая и лёгкая (≈2.5 ГБ)"},
-    {"name": "qwen3.6:35b-a3b", "note": "Очень умная MoE, часть уйдёт в ОЗУ — медленнее (≈22 ГБ)"},
+    {"name": "yuki-qwen3.6", "note": "Qwen3.6 35B-A3B, сжатая до ~3 бит: умная и быстрая, офлайн (≈13 ГБ)"},
+    {"name": "qwen3.6:35b-a3b", "note": "Qwen3.6 MoE без сжатия, часть уйдёт в ОЗУ (≈23 ГБ)"},
 ]
 
 status = {"stt": "загрузка...", "tts": "загрузка..."}
@@ -51,11 +52,11 @@ def _preload():
 
 async def _warm_voice():
     """Заранее поднимаем голосовые модули, чтобы первая фраза не ждала загрузки."""
-    if settings.get().get("tts_engine") == "chatterbox" and voice.tts_available():
+    if settings.get().get("tts_engine") in ("chatterbox", "espeech") and voice.tts_available():
         try:
             await voice.ensure_tts()
             async with httpx.AsyncClient(timeout=900) as c:
-                await c.post(voice.TTS_URL + "/warmup", json={})
+                await c.post(voice.TTS_URL + "/warmup", json=voice.tts_payload("Привет!"))
         except Exception as e:
             print("[voice] прогрев нейро-голоса не удался:", e)
         return
@@ -69,12 +70,30 @@ async def _warm_voice():
         print("[voice] прогрев не удался:", e)
 
 
+async def _warm_llm():
+    """Загружаем модель заранее и прогоняем неизменный системный промпт: он попадает в кэш Ollama,
+    и первый ответ не ждёт ни загрузки модели, ни пересчёта промпта."""
+    s = settings.get()
+    if s.get("llm_provider", "ollama") != "ollama" or s["llm_model"].endswith("cloud"):
+        return
+    try:
+        from assistant import brain, knowledge
+        await knowledge.refresh(force=False)
+        from assistant import llm
+        await llm.complete("chat", [{"role": "system", "content": brain.persona_prompt()},
+                                    {"role": "user", "content": "привет"}], temperature=0, max_tokens=1)
+        print("[llm] модель прогрета")
+    except Exception as e:
+        print("[llm] прогрев модели не удался:", e)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     settings.load()
     MAIN_LOOP["loop"] = asyncio.get_running_loop()
     asyncio.create_task(activity.run())
     asyncio.create_task(_warm_voice())
+    asyncio.create_task(_warm_llm())
     threading.Thread(target=_preload, daemon=True).start()
     yield
     voice.stop_worker()
@@ -378,6 +397,20 @@ async def post_memory(req: Request):
     if j.get("add"):
         await memory.add([j["add"]], j.get("kind", "user"))
     return {"ok": True}
+
+
+@app.get("/api/knowledge")
+async def get_knowledge():
+    from assistant import knowledge
+    info = await knowledge.refresh(force=False)
+    return {**info, "vault": str(knowledge.vault_dir())}
+
+
+@app.post("/api/knowledge/reindex")
+async def reindex_knowledge():
+    from assistant import knowledge
+    info = await knowledge.refresh(force=True)
+    return {**info, "vault": str(knowledge.vault_dir())}
 
 
 @app.delete("/api/memory/{mem_id}")

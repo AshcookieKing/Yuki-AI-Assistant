@@ -65,6 +65,8 @@ DEFAULTS = {
     "learn_activity": True,        # фоном изучать, какими программами и сайтами пользуется (только локально)
     "reflect_every": 15,           # раз в сколько реплик переписывать «дневник личности»
     "embed_model": "embeddinggemma:300m",
+    "knowledge_enabled": True,     # учиться на заметках Obsidian (поиск по смыслу, локально)
+    "obsidian_vault": "",          # путь к хранилищу Obsidian (пусто — data/vault)
     # LLM
     "ollama_url": "http://127.0.0.1:11434",
     "llm_provider": "ollama",      # ollama | groq | gemini | openrouter
@@ -92,7 +94,7 @@ DEFAULTS = {
     "followup_seconds": 30,        # после её ответа столько секунд можно говорить без имени
     "barge_in": True,              # перебивать её голосом
     # Голос
-    "tts_engine": "silero",        # silero | edge
+    "tts_engine": "espeech",       # espeech (живой русский нейро-голос, офлайн) | chatterbox | edge | silero
     "silero_model": "v5_ru",
     "silero_speaker": "baya",
     "edge_voice": "ru-RU-SvetlanaNeural",
@@ -102,6 +104,7 @@ DEFAULTS = {
     "anime_formant": 1.15,         # сдвиг формант: >1 — моложе/милее тембр
     "anime_expressive": 1.5,       # размах интонации
     "edge_pitch": 35,
+    "tts_nfe": 16,                 # ESpeech: шагов синтеза (меньше — быстрее, 12–32)
     "tts_exaggeration": 0.7,       # нейро-голос: эмоциональность (0.3 спокойно … 1.2 очень живо)
     "tts_cfg": 0.35,               # нейро-голос: насколько строго держаться темпа образца
     "tts_temperature": 0.8,        # нейро-голос: разнообразие интонаций              # тон голоса Edge, Гц (сдвиг внутри нейросети — без «металла»)

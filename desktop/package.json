@@ -1,7 +1,7 @@
 {
   "name": "yuki-desktop",
   "productName": "Yuki",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Юки — ИИ-ассистентка с 3D-аватаром",
   "author": "AshcookieKing",
   "private": true,
@@ -44,6 +44,8 @@
           "static/**/*",
           "singer/worker.py",
           "singer/tts_worker.py",
+          "singer/voice/**/*",
+          "tools/**/*",
           "!**/__pycache__/**",
           "!static/models/*.vrm"
         ]

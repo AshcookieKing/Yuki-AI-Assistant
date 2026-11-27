@@ -12,8 +12,15 @@ const LINKS = {
 };
 const VRM_URL = 'https://pixiv.github.io/three-vrm/packages/three-vrm/examples/models/VRM1_Constraint_Twist_Sample.vrm';
 const SEEDVC_URL = 'https://codeload.github.com/Plachtaa/seed-vc/zip/refs/heads/main';
-const BRAIN = 'qwen3.5:9b';
+const BRAIN_LIGHT = 'qwen3.5:9b';
 const EMBED = 'embeddinggemma:300m';
+// Основной мозг: Qwen3.6 35B-A3B (Apache 2.0), сжатая до ~3 бит (Unsloth Dynamic IQ3_XXS) — ~13 ГБ вместо 72.
+// Работает офлайн; MoE — на каждое слово считаются только ~3 млрд параметров, поэтому быстро даже частично в ОЗУ.
+const HF = 'https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/';
+const BRAIN_BIG = { name: 'yuki-qwen3.6', gguf: 'Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf', mmproj: 'mmproj-F16.gguf', gb: 14 };
+const MODELFILE = (gguf, mmproj) => `FROM ./${gguf}\nFROM ./${mmproj}\nTEMPLATE {{ .Prompt }}\nRENDERER qwen3.5\nPARSER qwen3.5\n` +
+  'PARAMETER top_p 0.95\nPARAMETER presence_penalty 1.5\nPARAMETER temperature 0.8\nPARAMETER top_k 20\n';
+const os = require('os');
 
 const ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1', PIP_DISABLE_PIP_VERSION_CHECK: '1' };
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
@@ -48,6 +55,26 @@ function findOllama() {
 
 function hasNvidia() { return quiet('nvidia-smi', ['-L']) !== null; }
 
+function vramGB() {
+  const out = quiet('nvidia-smi', ['--query-gpu=memory.total', '--format=csv,noheader,nounits']);
+  return out ? Math.round(Number(out.split(/\r?\n/)[0]) / 1024) : 0;
+}
+
+// большой мозг — если есть видеокарта от 8 ГБ и ОЗУ от 24 ГБ (часть экспертов MoE живёт в ОЗУ)
+function pickBrain() {
+  const ram = Math.round(os.totalmem() / 1e9);
+  return (vramGB() >= 8 && ram >= 24) ? 'big' : 'light';
+}
+
+function setSetting(root, key, value) {
+  const f = path.join(root, 'data', 'settings.json');
+  let j = {};
+  try { j = JSON.parse(fs.readFileSync(f, 'utf-8')); } catch {}
+  j[key] = value;
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, JSON.stringify(j, null, 2), 'utf-8');
+}
+
 function freeGB(dir) {
   let d = dir;
   while (d && !fs.existsSync(d)) d = path.dirname(d) === d ? null : path.dirname(d);
@@ -79,6 +106,7 @@ module.exports = function registerInstaller(ctx) {
       dataDir: ctx.root(), free: freeGB(ctx.root()),
       python: py ? `${py.version}` : null, ollama: !!findOllama(), nvidia: hasNvidia(),
       installed: ctx.ready(), voiceInstalled: ctx.voiceReady(), running, problem: ctx.problem(),
+      brain: pickBrain(), vram: vramGB(), ram: Math.round(os.totalmem() / 1e9),
     };
   };
 
@@ -121,6 +149,7 @@ module.exports = function registerInstaller(ctx) {
   };
 
   async function download(url, dest, detail) {
+    if (fs.existsSync(dest)) return;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Не удалось скачать ${url}: HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length')) || 0;
@@ -153,7 +182,7 @@ module.exports = function registerInstaller(ctx) {
     else if (/verifying|writing manifest|success/i.test(line)) detail('Проверяю…');
   };
 
-  function steps(voice) {
+  function steps(voice, brainChoice) {
     const R = () => ctx.root();
     const vpy = (venv) => path.join(R(), venv, 'Scripts', 'python.exe');
     const py = findPython();
@@ -182,10 +211,34 @@ module.exports = function registerInstaller(ctx) {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         if (!fs.existsSync(dest)) await download(VRM_URL, dest, d);
       } },
-      { id: 'brain', title: `Мозг — ${BRAIN} (~6.6 ГБ)`, w: 34, run: async (d) => {
-        await ensureOllama(ollama);
-        await run(ollama, ['pull', BRAIN], pullLine(d));
-      } },
+      ...(brainChoice === 'big' ? [
+        { id: 'brain', title: `Мозг — Qwen3.6 35B, сжатая (~${BRAIN_BIG.gb} ГБ)`, w: 40, run: async (d) => {
+          await ensureOllama(ollama);
+          const dir = path.join(R(), 'models');
+          fs.mkdirSync(dir, { recursive: true });
+          await download(HF + BRAIN_BIG.gguf, path.join(dir, BRAIN_BIG.gguf), d);
+          await download(HF + BRAIN_BIG.mmproj, path.join(dir, BRAIN_BIG.mmproj), d);
+          fs.writeFileSync(path.join(dir, 'Modelfile.yuki'), MODELFILE(BRAIN_BIG.gguf, BRAIN_BIG.mmproj));
+          d('Подключаю модель к Ollama…');
+          await new Promise((res, rej) => {
+            const p = spawn(ollama, ['create', BRAIN_BIG.name, '-f', 'Modelfile.yuki'], { cwd: dir, windowsHide: true, env: ENV });
+            current = p;
+            p.stdout.on('data', (b) => send({ type: 'log', line: b.toString().trim() }));
+            p.stderr.on('data', (b) => send({ type: 'log', line: b.toString().trim() }));
+            p.on('exit', (c) => { current = null; c === 0 ? res() : rej(new Error('ollama create завершилась с кодом ' + c)); });
+          });
+          // Ollama скопировала модель к себе — исходники больше не нужны
+          for (const f of [BRAIN_BIG.gguf, BRAIN_BIG.mmproj]) fs.rmSync(path.join(dir, f), { force: true });
+          setSetting(R(), 'llm_model', BRAIN_BIG.name);
+          setSetting(R(), 'num_ctx', 8192);
+        } },
+      ] : [
+        { id: 'brain', title: `Мозг — ${BRAIN_LIGHT} (~6.6 ГБ)`, w: 34, run: async (d) => {
+          await ensureOllama(ollama);
+          await run(ollama, ['pull', BRAIN_LIGHT], pullLine(d));
+          setSetting(R(), 'llm_model', BRAIN_LIGHT);
+        } },
+      ]),
       { id: 'memory', title: 'Память — embeddinggemma', w: 4, run: async (d) => {
         await run(ollama, ['pull', EMBED], pullLine(d));
         fs.mkdirSync(path.join(R(), 'data'), { recursive: true });
@@ -194,13 +247,21 @@ module.exports = function registerInstaller(ctx) {
     ];
     if (voice) {
       list.push(
-        { id: 'tts', title: 'Нейро-голос Chatterbox (CUDA)', w: 14, run: async (d) => {
+        { id: 'tts', title: 'Живой нейро-голос ESpeech + Chatterbox (CUDA)', w: 16, run: async (d) => {
           await ensureVenv('.venv-tts');
-          await run(vpy('.venv-tts'), ['-m', 'pip', 'install', '--upgrade', 'pip']);
-          await run(vpy('.venv-tts'), ['-m', 'pip', 'install', 'chatterbox-tts'], pipLine(d));
-          // chatterbox тянет CPU-версию torch — меняем на CUDA без зависимостей
-          await run(vpy('.venv-tts'), ['-m', 'pip', 'install', 'torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124',
-            '--force-reinstall', '--no-deps', '--index-url', 'https://download.pytorch.org/whl/cu124'], pipLine(d));
+          const T = vpy('.venv-tts');
+          const cons = path.join(R(), 'data', 'tts_constraints.txt');
+          fs.mkdirSync(path.dirname(cons), { recursive: true });
+          fs.writeFileSync(cons, 'torch==2.6.0+cu124\ntorchaudio==2.6.0+cu124\nnumpy==1.26.4\n');
+          await run(T, ['-m', 'pip', 'install', '--upgrade', 'pip']);
+          await run(T, ['-m', 'pip', 'install', 'torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124',
+            '--index-url', 'https://download.pytorch.org/whl/cu124'], pipLine(d));
+          await run(T, ['-m', 'pip', 'install', '-c', cons, '--extra-index-url', 'https://download.pytorch.org/whl/cu124',
+            'chatterbox-tts', 'f5-tts', 'ruaccent', 'pyarrow<17', 'datasets<4'], pipLine(d));
+          d('Скачиваю голосовую модель ESpeech…');
+          ENV.HF_HOME = path.join(R(), 'data', 'hf');  // модели голоса — в папку данных, не на системный диск
+          await run(T, ['-c', "from huggingface_hub import hf_hub_download as h; [h('ESpeech/ESpeech-TTS-1_RL-V2', f) for f in ('espeech_tts_rlv2.pt','vocab.txt')]"]);
+          setSetting(R(), 'tts_engine', 'espeech');
         } },
         { id: 'seedvc', title: 'Перенос голоса и пение — Seed-VC', w: 3, run: async (d) => {
           const singer = path.join(R(), 'singer');
@@ -254,7 +315,7 @@ module.exports = function registerInstaller(ctx) {
     if (!i.python || !i.ollama) return send({ type: 'error', message: 'Сначала установи недостающие программы.' });
     running = true;
     cancelled = false;
-    const list = steps(!!opts?.voice);
+    const list = steps(!!opts?.voice, opts?.brain || i.brain);
     const total = list.reduce((s, x) => s + x.w, 0);
     let doneW = 0;
     send({ type: 'plan', steps: list.map(({ id, title }) => ({ id, title })) });

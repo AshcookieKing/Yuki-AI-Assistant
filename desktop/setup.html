@@ -120,7 +120,7 @@
     </div>
     <div class="card">
       <label class="check"><input type="checkbox" id="voice">
-        <div><b>Пение и голос по образцу</b> <span class="hint">— ещё ~12 ГБ и 10–20 минут, нужна видеокарта NVIDIA</span></div>
+        <div><b>Живой нейро-голос и пение</b> <span class="hint">— ESpeech, Chatterbox, Seed-VC: ещё ~12 ГБ и 10–20 минут, нужна видеокарта NVIDIA</span></div>
       </label>
     </div>
   </section>
@@ -202,12 +202,15 @@
     if (info.voiceInstalled) voice.checked = true;
     else if (!refresh.touched) voice.checked = info.nvidia;
     // в папку данных: окружение Python ~4 ГБ, голосовые модули ~12 ГБ (модели мозга Ollama хранит у себя)
-    const need = (info.installed ? 0 : 4) + (voice.checked && !info.voiceInstalled ? 12 : 0);
+    const big = info.brain === 'big';
+    const need = (info.installed ? 0 : 4 + (big ? 14 : 0)) + (voice.checked && !info.voiceInstalled ? 12 : 0);
     const free = info.free;
     $('space').innerHTML = free == null ? '' :
       (free < need ? `<span class="warn">Свободно ${free} ГБ, а нужно около ${need} ГБ — выбери другой диск</span>`
                    : `Свободно ${free} ГБ · нужно около ${need} ГБ`)
-      + (info.installed ? '' : '<br>Мозг (~7 ГБ) Ollama хранит в своей папке на системном диске.');
+      + (info.installed ? '' : (big
+          ? `<br>Мозг: Qwen3.6 35B, сжатая (~14 ГБ) — подходит под видеокарту ${info.vram} ГБ и ОЗУ ${info.ram} ГБ. Работает без интернета. Ollama хранит её на системном диске.`
+          : `<br>Мозг: Qwen3.5 9B (~7 ГБ) — для твоего железа (видеокарта ${info.vram} ГБ, ОЗУ ${info.ram} ГБ) это быстрее. Ollama хранит её на системном диске.`));
     const missing = !info.python || !info.ollama;
     if (info.installed) {
       $('heroSub').textContent = info.voiceInstalled ? 'Юки уже готова к работе.' : 'Юки готова. Можно доставить пение и голос по образцу.';

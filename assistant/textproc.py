@@ -60,10 +60,18 @@ def strip_tags(text: str) -> str:
     return ANY_TAG_RE.sub("", text).strip()
 
 
-def pop_sentences(buf: str):
-    """Отрезает законченные предложения из буфера стрима."""
+FIRST_CUT = re.compile(r"(?<=[,;:—–])\s+")
+
+
+def pop_sentences(buf: str, first_phrase: bool = False):
+    """Отрезает законченные предложения из буфера стрима. first_phrase — для самой первой фразы ответа:
+    отдаём её уже по запятой, если набралось несколько слов (голос начинает звучать раньше)."""
     parts = SENTENCE_END.split(buf)
     if len(parts) <= 1:
+        if first_phrase and len(buf) > 28:
+            m = list(FIRST_CUT.finditer(buf))
+            if m and m[-1].start() > 18:
+                return [buf[:m[-1].start()]], buf[m[-1].end():]
         return [], buf
     done = [p for p in parts[:-1] if p.strip()]
     return done, parts[-1]

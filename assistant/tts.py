@@ -171,7 +171,7 @@ async def synthesize_base(text: str) -> bytes | None:
 
 async def synthesize(text: str) -> bytes | None:
     s = settings.get()
-    if s.get("tts_engine") == "chatterbox" and text and any(ch.isalpha() for ch in text):
+    if s.get("tts_engine") in ("chatterbox", "espeech") and text and any(ch.isalpha() for ch in text):
         # нейро-голос сам клонирует тембр образца — перенос голоса не нужен
         from . import voice
 

@@ -12,7 +12,7 @@ from datetime import datetime
 
 import httpx
 
-from . import activity, llm, memory, settings, textproc, tools, tts
+from . import activity, knowledge, llm, memory, settings, textproc, tools, tts
 from .settings import DATA_DIR
 
 WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
@@ -34,8 +34,36 @@ RUDE_LIMITS = ("Даже в грубых режимах: оскорбления 
 def _env_info() -> str:
     now = datetime.now()
     return (f"Компьютер: Windows 11, пользователь Windows «{os.getenv('USERNAME', '')}», домашняя папка "
-            f"{os.path.expanduser('~')}, рабочий стол {os.path.expanduser('~')}\\Desktop. "
-            f"Сейчас {now:%d.%m.%Y}, {WEEKDAYS[now.weekday()]}, {now:%H:%M}.")
+            f"{os.path.expanduser('~')}, рабочий стол {os.path.expanduser('~')}\\Desktop.")
+
+
+def _now_info() -> str:
+    now = datetime.now()
+    return f"Сейчас {now:%d.%m.%Y}, {WEEKDAYS[now.weekday()]}, {now:%H:%M}."
+
+
+def with_context(messages: list[dict], context: str) -> list[dict]:
+    """Меняющиеся сведения (время, память, заметки) ставим перед последней репликой пользователя:
+    начало диалога не меняется, Ollama берёт его из кэша и не пересчитывает — ответ начинается быстрее."""
+    if not context.strip():
+        return messages
+    idx = max((i for i, m in enumerate(messages) if m["role"] == "user"), default=len(messages))
+    return messages[:idx] + [{"role": "system", "content": context.strip()}] + messages[idx:]
+
+
+def persona_context(memories: list[str] | None = None, notes: list[str] | None = None) -> str:
+    s = settings.get()
+    doing = activity.now_text() if s.get("learn_activity", True) else ""
+    out = [_now_info()]
+    if memories:
+        out.append("Что ты помнишь (используй естественно, к месту, не перечисляй):\n" +
+                   "\n".join(f"- {m}" for m in memories))
+    if notes:
+        out.append("Из твоей базы знаний (заметки Obsidian) — опирайся на это, если к месту:\n" +
+                   "\n".join(f"- {n}" for n in notes))
+    if doing:
+        out.append("Что он делает на компьютере: " + doing + " Можешь к месту предложить помощь с этим.")
+    return "\n".join(out)
 
 
 def agent_prompt() -> str:
@@ -58,6 +86,7 @@ def agent_prompt() -> str:
 
 
 def persona_prompt(memories: list[str] | None = None) -> str:
+    """Неизменная часть промпта персонажа (кэшируется Ollama). Меняющееся — в persona_context()."""
     s = settings.get()
     name, user = s["assistant_name"], s["user_name"]
     persona = s["persona"].replace("{name}", name).replace("{user}", user)
@@ -68,12 +97,8 @@ def persona_prompt(memories: list[str] | None = None) -> str:
     }[s.get("pc_access", "confirm")]
     rude = int(s.get("rudeness", 1))
     diary = memory.self_notes()
-    doing = activity.now_text() if s.get("learn_activity", True) else ""
-    mem_block = ("\nЧто ты помнишь (используй естественно, к месту, не перечисляй):\n" +
-                 "\n".join(f"- {m}" for m in memories)) if memories else ""
     return f"""{persona}
-{('Твой дневник личности (это ты сама, ты развиваешься):' + chr(10) + diary) if diary else ''}{mem_block}
-{('Что он делает на компьютере: ' + doing + ' Можешь к месту предложить помощь с этим.') if doing else ''}
+{('Твой дневник личности (это ты сама, ты развиваешься):' + chr(10) + diary) if diary else ''}
 
 Стиль общения: {RUDENESS.get(rude, RUDENESS[1])}{(' ' + RUDE_LIMITS) if rude >= 2 else ''}
 
@@ -90,7 +115,18 @@ def persona_prompt(memories: list[str] | None = None) -> str:
 - Твой текст озвучивается голосом: не используй markdown, списки, таблицы, эмодзи и смайлики.
 - {access} Действия на ПК выполняет твой встроенный модуль, а их результаты приходят тебе системными сообщениями. Говори о них как о своих действиях, называя реальные данные из результатов. Если результатов нет — ничего не выполнялось: не придумывай данные и никогда не говори, что что-то сделала (на ПК или в реальном мире), — можно только пообещать или пошутить. Никогда не зачитывай служебные сообщения дословно.
 - {_env_info()}
-- {s.get('extra_rules', '')}"""
+- {s.get('extra_rules', '')}{_vault_rules()}"""
+
+
+def _vault_rules() -> str:
+    r = knowledge.rules()
+    ex = knowledge.examples()[:12]
+    out = ("\n\nПравила из твоей базы знаний:\n" + r) if r else ""
+    if ex:
+        name, user = settings.get()["assistant_name"], settings.get()["user_name"]
+        out += "\n\nОбразцы того, как ты отвечаешь (стиль, а не текст для повтора):\n" + \
+            "\n".join(f"{user}: {q}\n{name}: {a}" for q, a in ex)
+    return out
 
 
 # сложные вопросы, над которыми стоит подумать перед ответом
@@ -184,7 +220,7 @@ class Brain:
         out = [m for m in self.history if m["role"] in ("user", "assistant")]
         return [{"role": m["role"], "content": textproc.strip_tags(m["content"])} for m in out[-n:]]
 
-    async def _run_agent(self, emit, confirm, stop, memories=None) -> list[str]:
+    async def _run_agent(self, emit, confirm, stop, memories=None, notes=None) -> list[str]:
         s = settings.get()
         if s.get("pc_access") == "off":
             return []
@@ -193,9 +229,15 @@ class Brain:
             used = activity.summary(days=7, top=12)
             if used:
                 sys_prompt += "\nЧем пользователь пользуется чаще всего (за неделю):\n" + used
+        r = knowledge.rules()
+        if r:
+            sys_prompt += "\nПравила пользователя:\n" + r
+        ctx = [_now_info()]
         if memories:
-            sys_prompt += "\nИзвестно о пользователе и его компьютере:\n" + "\n".join(f"- {m}" for m in memories)
-        messages = [{"role": "system", "content": sys_prompt}] + self._plain_history()
+            ctx.append("Известно о пользователе и его компьютере:\n" + "\n".join(f"- {m}" for m in memories))
+        if notes:
+            ctx.append("Из заметок пользователя (Obsidian):\n" + "\n".join(f"- {n}" for n in notes))
+        messages = with_context([{"role": "system", "content": sys_prompt}] + self._plain_history(), "\n".join(ctx))
         log = []
         for _ in range(15):  # работа мышью требует больше шагов
             if stop.is_set():
@@ -232,6 +274,7 @@ class Brain:
         memory.busy = True
         # поиск в памяти идёт параллельно с агентом
         mem_task = asyncio.create_task(memory.search(user_text)) if settings.get().get("memory_enabled", True) else None
+        know_task = asyncio.create_task(knowledge.search(user_text)) if not hidden else None
         t_mem = time.time()
         self.history.append({"role": "user", "content": user_text})
         turn_start = len(self.history) - 1
@@ -271,7 +314,8 @@ class Brain:
             # агент нужен, только если в реплике есть признаки просьбы о действии — болтовня идёт сразу к персонажу
             wants_action = bool(ACTION_RE.search(user_text)) and not hidden
             memories = (await mem_task) if mem_task else []
-            actions = await self._run_agent(emit, confirm, stop, memories) if wants_action else []
+            notes = (await know_task) if know_task else []
+            actions = await self._run_agent(emit, confirm, stop, memories, notes) if wants_action else []
             t_agent = time.time()
             if actions:
                 self.history.append({"role": "system", "content":
@@ -286,9 +330,11 @@ class Brain:
                 del self.history[turn_start:]
                 return
 
-            messages = [{"role": "system", "content": persona_prompt(memories)}] + self.history
+            messages = with_context([{"role": "system", "content": persona_prompt()}] + self.history,
+                                    persona_context(memories, notes))
             content, buf, in_think = "", "", False
             first = None
+            spoken = False  # первую фразу режем раньше (по запятой), чтобы голос зазвучал быстрее
             s = settings.get()
             # сложный вопрос — сначала думает (умнее, но на несколько секунд дольше); болтовня — сразу
             deep = bool(s.get("think", False)) or (s.get("smart_mode", True) and not hidden and bool(COMPLEX_RE.search(user_text)))
@@ -309,8 +355,9 @@ class Brain:
                 buf += delta
                 first = first or time.time()
                 await emit({"type": "delta", "text": delta})
-                done, buf = textproc.pop_sentences(buf)
+                done, buf = textproc.pop_sentences(buf, first_phrase=not spoken)
                 for snt in done:
+                    spoken = True
                     await push_sentence(snt)
             if deep and not content.strip() and not stop.is_set():
                 # размышление съело весь лимит — отвечаем без него, чтобы не молчать
