@@ -167,11 +167,19 @@
     <button type="button" id="omniCheck">Проверить облако</button> <span id="omniState" class="hint"></span>
     <label>Движок
       <select data-key="tts_engine">
+        <option value="qwen3tts">Qwen3-TTS — Ono_Anna, игривая милая девочка, офлайн</option>
         <option value="espeech">ESpeech — живой русский нейро-голос, офлайн (рекомендуется)</option>
         <option value="silero">Silero — офлайн, локально</option>
         <option value="edge">Edge TTS — онлайн, бесплатно</option>
         <option value="chatterbox">Нейро-голос Chatterbox — живой, по образцу, локально</option>
       </select></label>
+    <label>Qwen3-TTS — модель
+      <select data-key="qtts_size">
+        <option value="1.7b">1.7B — понимает манеру и эмоции (рекомендуется)</option>
+        <option value="0.6b">0.6B — легче и быстрее, без манеры</option>
+      </select></label>
+    <label>Qwen3-TTS — манера речи (по-английски, пусто — игривая милая аниме-девочка)
+      <input type="text" data-key="qtts_style" placeholder="Playful, cute young anime girl, teasing, joking manner"></label>
     <label>ESpeech — качество (шаги, меньше — быстрее): <b data-show="tts_nfe"></b>
       <input type="range" min="8" max="32" step="2" data-key="tts_nfe" data-type="number"></label>
     <label>Нейро-голос — эмоциональность: <b data-show="tts_exaggeration"></b>

@@ -169,8 +169,16 @@ async def synthesize_base(text: str) -> bytes | None:
     return await asyncio.to_thread(_silero, text, s)
 
 
-async def synthesize(text: str) -> bytes | None:
+async def synthesize(text: str, emotion: str = "neutral") -> bytes | None:
     s = settings.get()
+    if s.get("tts_engine") == "qwen3tts" and text and any(ch.isalpha() for ch in text):
+        from . import voice
+
+        try:
+            return await voice.qwen_tts(text, emotion)
+        except Exception as e:
+            print("[TTS] Qwen3-TTS не ответил, говорю запасным:", e)
+            return await synthesize_base(text)
     if s.get("tts_engine") in ("chatterbox", "espeech") and text and any(ch.isalpha() for ch in text):
         # нейро-голос сам клонирует тембр образца — перенос голоса не нужен
         from . import voice

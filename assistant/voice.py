@@ -215,6 +215,80 @@ async def neural_tts(text: str) -> bytes:
     return r.content
 
 
+# ---------- голос Qwen3-TTS CustomVoice (Ono_Anna), .venv-qtts, порт 8768 ----------
+QTTS_URL = "http://127.0.0.1:8768"
+QTTS_PYTHON = ROOT / ".venv-qtts" / "Scripts" / "python.exe"
+QTTS_SCRIPT = ROOT / "singer" / "qtts_worker.py"
+_qtts_proc: subprocess.Popen | None = None
+_qtts_lock = asyncio.Lock()
+
+# эмоция фразы -> манера речи (понимает модель 1.7B)
+QTTS_STYLE = ("Playful, cute young anime girl, cheerful and teasing, light bouncy voice, smiling while speaking, "
+              "joking manner.")
+QTTS_EMO = {
+    "happy": "Very happy and bubbly.", "laugh": "Laughing, giggling between words.", "excited": "Excited and energetic.",
+    "smug": "Smug and teasing, a bit sly, giggling.", "evil": "Mischievous, playfully evil, plotting.",
+    "angry": "Pretend-angry, huffy but cute.", "pout": "Pouting, sulky and childish.", "sad": "Sad and quiet.",
+    "cry": "Tearful, sniffling.", "surprised": "Surprised, high-pitched.", "scared": "Scared, trembling.",
+    "shy": "Shy and embarrassed, soft.", "love": "Sweet and affectionate, tender.", "think": "Thoughtful, slower.",
+    "confused": "Confused, questioning.", "sleepy": "Sleepy, yawning, slow.", "disgust": "Disgusted, grossed out.",
+    "relaxed": "Relaxed and calm.", "wink": "Flirty and playful.", "proud": "Proud and confident.",
+    "bored": "Bored, drawling.", "determined": "Determined and firm.", "neutral": "",
+}
+
+
+def qtts_available() -> bool:
+    return QTTS_PYTHON.exists() and QTTS_SCRIPT.exists()
+
+
+async def _qtts_alive() -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=2) as c:
+            return (await c.get(QTTS_URL + "/")).status_code == 200
+    except Exception:
+        return False
+
+
+async def ensure_qtts():
+    global _qtts_proc
+    async with _qtts_lock:
+        if await _qtts_alive():
+            return
+        if not qtts_available():
+            raise RuntimeError("Голос Qwen3-TTS не установлен")
+        if not (_qtts_proc and _qtts_proc.poll() is None):
+            log = open(DATA_DIR / "qtts_worker.log", "a", encoding="utf-8")
+            _qtts_proc = subprocess.Popen([str(QTTS_PYTHON), str(QTTS_SCRIPT)], stdout=log, stderr=log,
+                                          creationflags=subprocess.CREATE_NO_WINDOW,
+                                          env={**os.environ, "PYTHONIOENCODING": "utf-8", "HF_HOME": str(DATA_DIR / "hf")})
+        for _ in range(240):
+            if await _qtts_alive():
+                return
+            await asyncio.sleep(0.5)
+        raise RuntimeError("Голос Qwen3-TTS не запустился, см. data/qtts_worker.log")
+
+
+def qtts_payload(text: str, emotion: str = "neutral") -> dict:
+    s = settings.get()
+    style = (s.get("qtts_style") or QTTS_STYLE).strip()
+    return {"text": text, "size": s.get("qtts_size", "1.7b"), "speaker": s.get("qtts_speaker", "Ono_Anna"),
+            "language": "Russian", "instruct": (style + " " + QTTS_EMO.get(emotion, "")).strip()}
+
+
+async def qwen_tts(text: str, emotion: str = "neutral") -> bytes:
+    await ensure_qtts()
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(QTTS_URL + "/tts", json=qtts_payload(text, emotion))
+    if r.status_code != 200:
+        raise RuntimeError(r.text[:200])
+    return r.content
+
+
+def stop_qtts():
+    if _qtts_proc and _qtts_proc.poll() is None:
+        subprocess.run(["taskkill", "/pid", str(_qtts_proc.pid), "/T", "/F"], capture_output=True)
+
+
 def stop_tts():
     if _tts_proc and _tts_proc.poll() is None:
         subprocess.run(["taskkill", "/pid", str(_tts_proc.pid), "/T", "/F"], capture_output=True)

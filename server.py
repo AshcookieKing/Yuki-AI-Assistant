@@ -52,6 +52,14 @@ def _preload():
 
 async def _warm_voice():
     """Заранее поднимаем голосовые модули, чтобы первая фраза не ждала загрузки."""
+    if settings.get().get("tts_engine") == "qwen3tts" and voice.qtts_available():
+        try:
+            await voice.ensure_qtts()
+            async with httpx.AsyncClient(timeout=900) as c:
+                await c.post(voice.QTTS_URL + "/warmup", json=voice.qtts_payload("Привет!"))
+        except Exception as e:
+            print("[voice] прогрев Qwen3-TTS не удался:", e)
+        return
     if settings.get().get("tts_engine") in ("chatterbox", "espeech") and voice.tts_available():
         try:
             await voice.ensure_tts()
@@ -98,6 +106,7 @@ async def lifespan(_app):
     yield
     voice.stop_worker()
     voice.stop_tts()
+    voice.stop_qtts()
 
 
 app = FastAPI(lifespan=lifespan)

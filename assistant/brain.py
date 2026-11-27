@@ -305,7 +305,7 @@ class Brain:
             if emo:
                 state["emotion"] = emo
             if clean:
-                job = asyncio.create_task(tts.synthesize(textproc.for_speech(clean)))
+                job = asyncio.create_task(tts.synthesize(textproc.for_speech(clean), state["emotion"]))
                 await sentences.put((state["emotion"], gesture, clean, job))
             elif emo or gesture:
                 await emit({"type": "emotion", "emotion": state["emotion"], "gesture": gesture})

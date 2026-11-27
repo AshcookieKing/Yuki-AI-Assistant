@@ -44,6 +44,7 @@
           "static/**/*",
           "singer/worker.py",
           "singer/tts_worker.py",
+          "singer/qtts_worker.py",
           "singer/voice/**/*",
           "tools/**/*",
           "!**/__pycache__/**",

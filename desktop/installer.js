@@ -311,6 +311,17 @@ module.exports = function registerInstaller(ctx) {
           await run(T, ['-c', "from huggingface_hub import hf_hub_download as h; [h('ESpeech/ESpeech-TTS-1_RL-V2', f) for f in ('espeech_tts_rlv2.pt','vocab.txt')]"]);
           setSetting(R(), 'tts_engine', 'espeech');
         } },
+        { id: 'qtts', title: 'Голос Qwen3-TTS — Ono_Anna, игривая девочка (CUDA)', w: 12, run: async (d) => {
+          await ensureVenv('.venv-qtts');
+          const Q = vpy('.venv-qtts');
+          await run(Q, ['-m', 'pip', 'install', '--upgrade', 'pip']);
+          await run(Q, ['-m', 'pip', 'install', 'torch==2.6.0+cu124', 'torchaudio==2.6.0+cu124',
+            '--index-url', 'https://download.pytorch.org/whl/cu124'], pipLine(d));
+          await run(Q, ['-m', 'pip', 'install', 'qwen-tts'], pipLine(d));
+          d('Скачиваю голосовую модель Qwen3-TTS…');
+          ENV.HF_HOME = path.join(R(), 'data', 'hf');
+          await run(Q, ['-c', "from huggingface_hub import snapshot_download as s; s('Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice')"]);
+        } },
         { id: 'seedvc', title: 'Перенос голоса и пение — Seed-VC', w: 3, run: async (d) => {
           const singer = path.join(R(), 'singer');
           if (fs.existsSync(path.join(singer, 'seed-vc'))) return;
