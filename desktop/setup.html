@@ -151,6 +151,7 @@
 
   <div class="footer">
     <div class="hint" id="foot">Займёт 15–40 минут, нужен интернет.</div>
+    <button class="btn hidden" id="skip">Позже</button>
     <button class="btn primary" id="go">Начать подготовку</button>
   </div>
 </main>
@@ -212,17 +213,22 @@
           ? `<br>Мозг: Qwen3.6 35B, сжатая (~14 ГБ) — подходит под видеокарту ${info.vram} ГБ и ОЗУ ${info.ram} ГБ. Работает без интернета. Ollama хранит её на системном диске.`
           : `<br>Мозг: Qwen3.5 9B (~7 ГБ) — для твоего железа (видеокарта ${info.vram} ГБ, ОЗУ ${info.ram} ГБ) это быстрее. Ollama хранит её на системном диске.`));
     const missing = !info.python || !info.ollama;
+    const up = info.upgrades || [];
     if (info.installed) {
-      $('heroSub').textContent = info.voiceInstalled ? 'Юки уже готова к работе.' : 'Юки готова. Можно доставить пение и голос по образцу.';
+      $('heroSub').textContent = up.length ? 'В новой версии есть новое: ' + up.map((u) => u.title).join(', ') + '.'
+        : info.voiceInstalled ? 'Юки уже готова к работе.' : 'Юки готова. Можно доставить пение и голос по образцу.';
     }
+    $('skip').classList.toggle('hidden', !(info.installed && up.length && !info.problem));
     $('problem').classList.toggle('hidden', !info.problem);
     $('problemText').textContent = info.problem || '';
     $('go').textContent = missing ? 'Проверить снова' : info.problem ? 'Починить'
+      : (info.installed && up.length && !(voice.checked && !info.voiceInstalled)) ? 'Доставить новое'
       : (info.installed && !(voice.checked && !info.voiceInstalled) ? 'Запустить Юки' : 'Начать подготовку');
     $('pick').disabled = info.installed;
   }
   $('voice').onchange = () => { refresh.touched = true; refresh(info); };
   $('pick').onclick = async () => refresh(await api.pickDir());
+  $('skip').onclick = () => api.launch();
 
   $('go').onclick = async () => {
     if (phase === 'done') return api.launch();
@@ -230,7 +236,8 @@
     if (phase === 'prep') {
       await refresh();
       if (!info.python || !info.ollama) return;
-      if (info.installed && !info.problem && !($('voice').checked && !info.voiceInstalled)) return api.launch();
+      if (info.installed && !info.problem && !($('voice').checked && !info.voiceInstalled) && !(info.upgrades || []).length)
+        return api.launch();
     }
     phase = 'run';
     $('prep').classList.add('hidden');
@@ -239,7 +246,9 @@
     $('go').disabled = true;
     $('go').textContent = 'Идёт подготовка…';
     $('foot').textContent = 'Можно свернуть окно — я сама всё поставлю.';
-    api.start({ voice: $('voice').checked && info.nvidia && !info.voiceInstalled });
+    const fullVoice = $('voice').checked && info.nvidia && !info.voiceInstalled;
+    // уже подготовлена и не надо ставить голос с нуля — доставляем только новое
+    api.start({ voice: fullVoice, upgrade: info.installed && !info.problem && !fullVoice && (info.upgrades || []).length > 0 });
   };
 
   const log = $('log');

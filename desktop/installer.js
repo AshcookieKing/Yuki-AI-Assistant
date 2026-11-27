@@ -66,6 +66,17 @@ function pickBrain() {
   return (vramGB() >= 8 && ram >= 24) ? 'big' : 'light';
 }
 
+// модель уже есть в Ollama? Смотрим в её папку на диске — так работает, даже если Ollama сейчас не запущена
+function hasOllamaModel(name) {
+  const base = process.env.OLLAMA_MODELS || path.join(os.homedir(), '.ollama', 'models');
+  return ['manifests-v2/ollama.com/library', 'manifests/registry.ollama.ai/library']
+    .some((d) => fs.existsSync(path.join(base, d, name)));
+}
+
+function getSetting(root, key) {
+  try { return JSON.parse(fs.readFileSync(path.join(root, 'data', 'settings.json'), 'utf-8'))[key]; } catch { return undefined; }
+}
+
 function setSetting(root, key, value) {
   const f = path.join(root, 'data', 'settings.json');
   let j = {};
@@ -100,13 +111,25 @@ module.exports = function registerInstaller(ctx) {
   let cancelled = false;
   let send = () => {};
 
+  // что появилось в новой версии, но ещё не стоит у уже подготовленной Юки
+  const upgrades = () => {
+    if (!ctx.ready()) return [];
+    const out = [];
+    if (pickBrain() === 'big' && !hasOllamaModel(BRAIN_BIG.name))
+      out.push({ id: 'brain', title: `Новый мозг Qwen3.6 35B, сжатая (~${BRAIN_BIG.gb} ГБ)` });
+    const tts = path.join(ctx.root(), '.venv-tts');
+    if (hasNvidia() && fs.existsSync(path.join(tts, 'pyvenv.cfg')) && !fs.existsSync(path.join(tts, 'Lib', 'site-packages', 'f5_tts')))
+      out.push({ id: 'espeech', title: 'Живой голос ESpeech (~2 ГБ)' });
+    return out;
+  };
+
   const info = () => {
     const py = findPython();
     return {
       dataDir: ctx.root(), free: freeGB(ctx.root()),
       python: py ? `${py.version}` : null, ollama: !!findOllama(), nvidia: hasNvidia(),
       installed: ctx.ready(), voiceInstalled: ctx.voiceReady(), running, problem: ctx.problem(),
-      brain: pickBrain(), vram: vramGB(), ram: Math.round(os.totalmem() / 1e9),
+      brain: pickBrain(), vram: vramGB(), ram: Math.round(os.totalmem() / 1e9), upgrades: upgrades(),
     };
   };
 
@@ -182,7 +205,7 @@ module.exports = function registerInstaller(ctx) {
     else if (/verifying|writing manifest|success/i.test(line)) detail('Проверяю…');
   };
 
-  function steps(voice, brainChoice) {
+  function steps(voice, brainChoice, upgrade) {
     const R = () => ctx.root();
     const vpy = (venv) => path.join(R(), venv, 'Scripts', 'python.exe');
     const py = findPython();
@@ -229,8 +252,12 @@ module.exports = function registerInstaller(ctx) {
           });
           // Ollama скопировала модель к себе — исходники больше не нужны
           for (const f of [BRAIN_BIG.gguf, BRAIN_BIG.mmproj]) fs.rmSync(path.join(dir, f), { force: true });
-          setSetting(R(), 'llm_model', BRAIN_BIG.name);
-          setSetting(R(), 'num_ctx', 8192);
+          // свой выбор (облако, другая модель) не трогаем — меняем только стандартный мозг
+          const cur = getSetting(R(), 'llm_model');
+          if (!upgrade || !cur || ['qwen3.5:9b', 'qwen3:8b', 'qwen3:4b', 'qwen3:14b'].includes(cur)) {
+            setSetting(R(), 'llm_model', BRAIN_BIG.name);
+            setSetting(R(), 'num_ctx', 8192);
+          }
         } },
       ] : [
         { id: 'brain', title: `Мозг — ${BRAIN_LIGHT} (~6.6 ГБ)`, w: 34, run: async (d) => {
@@ -245,6 +272,27 @@ module.exports = function registerInstaller(ctx) {
         fs.writeFileSync(path.join(R(), 'data', '.installed'), 'ok');
       } },
     ];
+    if (upgrade) {
+      // доставка нового поверх уже подготовленной Юки: только недостающие шаги
+      const need = new Set(upgrades().map((u) => u.id));
+      const pick = (id) => list.find((x) => x.id === id);
+      const out = [];
+      if (need.has('brain')) out.push(pick('brain'));
+      if (need.has('espeech')) {
+        out.push({ id: 'espeech', title: 'Живой голос ESpeech', w: 10, run: async (d) => {
+          const T = vpy('.venv-tts');
+          const cons = path.join(R(), 'data', 'tts_constraints.txt');
+          fs.writeFileSync(cons, 'torch==2.6.0+cu124\ntorchaudio==2.6.0+cu124\nnumpy==1.26.4\n');
+          await run(T, ['-m', 'pip', 'install', '-c', cons, '--extra-index-url', 'https://download.pytorch.org/whl/cu124',
+            'f5-tts', 'ruaccent', 'pyarrow<17', 'datasets<4'], pipLine(d));
+          d('Скачиваю голосовую модель ESpeech…');
+          ENV.HF_HOME = path.join(R(), 'data', 'hf');
+          await run(T, ['-c', "from huggingface_hub import hf_hub_download as h; [h('ESpeech/ESpeech-TTS-1_RL-V2', f) for f in ('espeech_tts_rlv2.pt','vocab.txt')]"]);
+          setSetting(R(), 'tts_engine', 'espeech');
+        } });
+      }
+      return out;
+    }
     if (voice) {
       list.push(
         { id: 'tts', title: 'Живой нейро-голос ESpeech + Chatterbox (CUDA)', w: 16, run: async (d) => {
@@ -315,7 +363,7 @@ module.exports = function registerInstaller(ctx) {
     if (!i.python || !i.ollama) return send({ type: 'error', message: 'Сначала установи недостающие программы.' });
     running = true;
     cancelled = false;
-    const list = steps(!!opts?.voice, opts?.brain || i.brain);
+    const list = steps(!!opts?.voice, opts?.brain || i.brain, !!opts?.upgrade);
     const total = list.reduce((s, x) => s + x.w, 0);
     let doneW = 0;
     send({ type: 'plan', steps: list.map(({ id, title }) => ({ id, title })) });
@@ -344,6 +392,7 @@ module.exports = function registerInstaller(ctx) {
 
   return {
     isRunning: () => running,
+    upgrades,
     cancel: () => { cancelled = true; killTree(current); },
   };
 };

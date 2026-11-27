@@ -209,7 +209,8 @@ function menuTemplate() {
     { label: 'Поверх всех окон', type: 'checkbox', checked: onTop, click: (i) => setOnTop(i.checked, true) },
     { label: 'Вернуть в угол экрана', click: () => { mascot?.setBounds(defaultBounds()); saveState(); } },
     { label: 'Перезагрузить', click: () => mascot?.reload() },
-    ...(PACKAGED ? [{ label: voiceReady() ? 'Подготовка и модули…' : 'Установить пение и нейро-голос…', click: openSetup }] : []),
+    ...(PACKAGED ? [{ label: installer.upgrades().length ? 'Доставить новое (мозг, голос)…'
+      : voiceReady() ? 'Подготовка и модули…' : 'Установить пение и нейро-голос…', click: openSetup }] : []),
     { type: 'separator' },
     updateState === 'готово'
       ? { label: 'Установить обновление и перезапустить', click: () => updater?.quitAndInstall(true, true) }
@@ -326,6 +327,16 @@ app.whenReady().then(async () => {
   mlog(`backendReady=${backendReady()}`);
   if (!backendReady()) { openSetup(); return; }
   await startMascot();
+  // после обновления один раз показываем, что можно доставить (мозг, голос) — дальше это в меню трея
+  if (PACKAGED) {
+    const seen = path.join(ROOT, 'data', '.upgrade_seen');
+    let last = '';
+    try { last = fs.readFileSync(seen, 'utf-8').trim(); } catch {}
+    if (last !== app.getVersion() && installer.upgrades().length) {
+      try { fs.writeFileSync(seen, app.getVersion()); } catch {}
+      openSetup();
+    }
+  }
 });
 
 async function startMascot() {

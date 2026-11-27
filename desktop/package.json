@@ -1,7 +1,7 @@
 {
   "name": "yuki-desktop",
   "productName": "Yuki",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Юки — ИИ-ассистентка с 3D-аватаром",
   "author": "AshcookieKing",
   "private": true,
